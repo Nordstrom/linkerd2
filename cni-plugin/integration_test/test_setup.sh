@@ -40,6 +40,8 @@ function log(){
     printf "${WHITE}${msg}${NORMAL}\n"
 }
 
+echo "CNI_TEST_FUNCTION = $CNI_TEST_FUNCTION"
+echo "CNI_LAB_YAML_FILE = $CNI_LAB_YAML_FILE"
 
 TESTER_JOB_NAME=cni-iptables-tester
 
@@ -54,15 +56,30 @@ sleep 10
 header "Creating the test lab..."
 kubectl create -f ${CNI_LAB_YAML_FILE}
 
-#POD_WITH_NO_RULES_IP=$(get_ip_for_pod "pod-with-no-rules") #log "POD_WITH_NO_RULES_IP=${POD_WITH_NO_RULES_IP}" 
-POD_REDIRECTS_ALL_PORTS_IP=$(get_ip_for_pod "pod-redirects-all-ports")
-log "POD_REDIRECTS_ALL_PORTS_IP=${POD_REDIRECTS_ALL_PORTS_IP}"
+# Testing validity of input arguments
+if [ $CNI_TEST_FUNCTION = "TestPodWithNoRules" ]
+then
+  POD_WITH_NO_RULES_IP=$(get_ip_for_pod "pod-with-no-rules")
+  log "POD_WITH_NO_RULES_OP=${POD_WITH_NO_RULES_IP}"
+elif [ $CNI_TEST_FUNCTION = "TestPodRedirectsAllPorts" ]
+then
+  POD_REDIRECTS_ALL_PORTS_IP=$(get_ip_for_pod "pod-redirects-all-ports")
+  log "POD_REDIRECTS_ALL_PORTS_IP=${POD_REDIRECTS_ALL_PORTS_IP}"
+else
+  log "Please choose CNI_TEST_FUNCTION=TestPodWithNoRules or TestPodRedirectsAllPorts"
+  exit 1
+fi
 
-#POD_REDIRECTS_WHITELISTED_IP=$(get_ip_for_pod "pod-redirects-whitelisted")
-#log "POD_REDIRECTS_WHITELISTED_IP=${POD_REDIRECTS_WHITELISTED_IP}"
+if [ $CNI_LAB_YAML_FILE = "" ]
+then
+  log "Please choose CNI_LAB_YAML_FILE=iptables/no-rules-iptablestest-lab.yaml or iptables/redirect-all-iptablestest-lab.yaml"
+  exit 1
+fi
 
-#POD_DOEST_REDIRECT_BLACKLISTED_IP=$(get_ip_for_pod "pod-doesnt-redirect-blacklisted")
-#log "POD_DOEST_REDIRECT_BLACKLISTED_IP=${POD_DOEST_REDIRECT_BLACKLISTED_IP}"
+
+
+
+
 
 header "Running tester..."
 cat <<EOF | kubectl create -f -
@@ -83,10 +100,6 @@ spec:
             value: ${POD_REDIRECTS_ALL_PORTS_IP}
           - name: POD_WITH_NO_RULES_IP
             value: ${POD_WITH_NO_RULES_IP}
-          - name: POD_REDIRECTS_WHITELISTED_IP
-            value: ${POD_REDIRECTS_WHITELISTED_IP}
-          - name: POD_DOEST_REDIRECT_BLACKLISTED_IP
-            value: ${POD_DOEST_REDIRECT_BLACKLISTED_IP}
         command: ["sh", "-c", "cd /go && (go test cni_rules_test.go -run ${CNI_TEST_FUNCTION} -v -integration-tests; echo \"status:$?\")"]
       restartPolicy: Never
 EOF

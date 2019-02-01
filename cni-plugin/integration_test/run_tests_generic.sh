@@ -8,6 +8,17 @@ doesCalicoExist() {
   if [ "$trimmedmatch" != "" ]; then echo "0"; else echo "1"; fi
 }
 
+
+# Testing validity of input arguments
+if [ -z "$1" -o -z "$2" ]
+then
+  echo "Please provide the first and second arguments such as:"
+  echo "./run_tests.sh iptables/no-rules-iptablestest-lab.yaml TestPodWithNoRules"
+  echo "or"
+  echo "./run_tests.sh iptables/redirect-all-iptablestest-lab.yaml TestPodRedirectsAllPorts"
+  exit 1
+fi
+
 echo "-------------------Killing Minikube"
 minikube stop
 minikube delete
@@ -61,7 +72,6 @@ echo "-------------------Waiting for linkerd-cni components to become ready"
 kubectl wait --for=condition=ready pod -n linkerd -l k8s-app=linkerd-cni
 
 echo "-------------------Running tests"
-#CNI_LAB_YAML_FILE=iptables/redirect-all-iptablestest-lab.yaml CNI_TEST_FUNCTION=TestPodRedirectsAllPorts ./../../bin/mkube ./test_setup.sh
 CNI_LAB_YAML_FILE=$1 CNI_TEST_FUNCTION=$2 ./../../bin/mkube ./test_setup.sh
 
 echo "-------------------Cleanup cni lab yaml"
