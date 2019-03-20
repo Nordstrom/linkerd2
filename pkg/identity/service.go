@@ -53,6 +53,7 @@ type (
 )
 
 // NewService creates a new identity service.
+
 func NewService(v Validator, i tls.Issuer) *Service {
 	return &Service{v, i}
 }

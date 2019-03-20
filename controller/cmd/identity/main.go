@@ -91,7 +91,8 @@ func main() {
 		}
 	}
 
-	ca := tls.NewCA(*creds, validity)
+	ca := tls.EasyNewCADelegate()
+	//ca := tls.NewCA(*creds, validity)
 
 	k8s, err := k8s.NewClientSet(*kubeConfigPath)
 	if err != nil {
