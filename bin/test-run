@@ -32,7 +32,7 @@ function check_if_k8s_reachable(){
 
 function run_test(){
     printf "Running test [%s] %s\\n" "$(basename "$1")" "$2"
-    go test -v "$1" -linkerd "$linkerd_path" -linkerd-namespace "$linkerd_namespace" -integration-tests "$2"
+    GO111MODULE=on go test -v -mod=readonly "$1" -linkerd "$linkerd_path" -linkerd-namespace "$linkerd_namespace" -integration-tests "$2"
 }
 
 linkerd_path=$1
