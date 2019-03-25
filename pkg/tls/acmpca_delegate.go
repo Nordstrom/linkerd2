@@ -11,16 +11,34 @@ import (
 	"github.com/aws/aws-sdk-go/service/acmpca"
 )
 
-// Implements the Issuer Interface
-type ACMPCADelegate struct {
-	acmClient *acmpca.ACMPCA
-	caARN     string
+type IACMClientFactory interface {
+	newClient() (*acmpca.ACMPCA, error)
+}
+
+type ACMClientFactory struct {
+	Region string
+}
+
+func (f *ACMClientFactory) newClient() (*acmpca.ACMPCA, error) {
+	// aws session
+	session, sessionErr := session.NewSession(&aws.Config{
+		Region: aws.String(f.Region),
+	})
+
+	if sessionErr != nil {
+		return nil, sessionErr
+	}
+
+	return acmpca.New(session), nil
 }
 
 func EasyNewCADelegate() (*ACMPCADelegate, error) {
 	caARN := string("arn:aws:acm-pca:us-west-2:536616252769:certificate-authority/ba1e0a1b-7057-4ad1-ad35-43188c413755")
 	region := string("us-west-2")
-	acmClient, clientCreationErr := newClient(region)
+	factory := ACMClientFactory{
+		Region: region,
+	}
+	acmClient, clientCreationErr := factory.newClient()
 	if clientCreationErr != nil {
 		return nil, clientCreationErr
 	}
@@ -31,8 +49,8 @@ func EasyNewCADelegate() (*ACMPCADelegate, error) {
 	}, nil
 }
 
-func NewCADelegate(region string, caARN string) (*ACMPCADelegate, error) {
-	acmClient, clientCreationErr := newClient(region)
+func NewCADelegate(clientFactory IACMClientFactory, caARN string) (*ACMPCADelegate, error) {
+	acmClient, clientCreationErr := clientFactory.newClient()
 	if clientCreationErr != nil {
 		return nil, clientCreationErr
 	}
@@ -40,6 +58,12 @@ func NewCADelegate(region string, caARN string) (*ACMPCADelegate, error) {
 		acmClient: acmClient,
 		caARN:     caARN,
 	}, nil
+}
+
+// Implements the Issuer Interface
+type ACMPCADelegate struct {
+	acmClient *acmpca.ACMPCA
+	caARN     string
 }
 
 // Implements the Issuer Interface
@@ -72,19 +96,6 @@ func (c *ACMPCADelegate) IssueEndEntityCrt(csr *x509.CertificateRequest) (Crt, e
 	}
 
 	return crt, nil
-}
-
-func newClient(region string) (*acmpca.ACMPCA, error) {
-	// aws session
-	session, sessionErr := session.NewSession(&aws.Config{
-		Region: aws.String(region),
-	})
-
-	if sessionErr != nil {
-		return nil, sessionErr
-	}
-
-	return acmpca.New(session), nil
 }
 
 func (c *ACMPCADelegate) getCertificate(acmClient *acmpca.ACMPCA, certificateARN string) (*acmpca.GetCertificateOutput, error) {
