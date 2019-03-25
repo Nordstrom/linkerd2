@@ -46,7 +46,7 @@ docker_build() {
         -t "$repo:$tag" \
         -f "$file" \
         $extra \
-        > "$output"
+#        > "$output"
 
     echo "$repo:$tag"
 }
