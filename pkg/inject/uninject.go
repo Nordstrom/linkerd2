@@ -11,24 +11,24 @@ import (
 // Uninject removes from the workload in conf the init and proxy containers,
 // the TLS volumes and the extra annotations/labels that were added
 func (conf *ResourceConfig) Uninject(report *Report) ([]byte, error) {
-	if conf.podSpec == nil {
+	if conf.pod.spec == nil {
 		return nil, nil
 	}
 
 	conf.uninjectPodSpec(report)
 
-	if conf.workLoadMeta != nil {
-		uninjectObjectMeta(conf.workLoadMeta)
+	if conf.workload.meta != nil {
+		uninjectObjectMeta(conf.workload.meta)
 	}
 
-	uninjectObjectMeta(conf.podMeta.ObjectMeta)
+	uninjectObjectMeta(conf.pod.Meta)
 	return conf.YamlMarshalObj()
 }
 
 // Given a PodSpec, update the PodSpec in place with the sidecar
 // and init-container uninjected
 func (conf *ResourceConfig) uninjectPodSpec(report *Report) {
-	t := conf.podSpec
+	t := conf.pod.spec
 	initContainers := []v1.Container{}
 	for _, container := range t.InitContainers {
 		if container.Name != k8s.InitContainerName {
@@ -46,6 +46,14 @@ func (conf *ResourceConfig) uninjectPodSpec(report *Report) {
 		}
 	}
 	t.Containers = containers
+
+	volumes := []v1.Volume{}
+	for _, volume := range t.Volumes {
+		if volume.Name != k8s.IdentityEndEntityVolumeName {
+			volumes = append(volumes, volume)
+		}
+	}
+	t.Volumes = volumes
 }
 
 func uninjectObjectMeta(t *metav1.ObjectMeta) {

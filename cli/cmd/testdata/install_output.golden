@@ -6,6 +6,21 @@ metadata:
   annotations:
     ProxyInjectAnnotation: ProxyInjectDisabled
 ---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: linkerd-config
+  namespace: Namespace
+  labels:
+    ControllerComponentLabel: controller
+  annotations:
+    CreatedByAnnotation: CliVersion
+data:
+  global: |
+    GlobalConfig
+  proxy: |
+    ProxyConfig
+---
 ###
 ### Identity Controller Service
 ###
@@ -369,6 +384,9 @@ spec:
         resources: {}
         securityContext:
           runAsUser: 2103
+        volumeMounts:
+        - mountPath: /var/run/linkerd/config
+          name: config
       - args:
         - tap
         - -controller-namespace=Namespace
@@ -473,21 +491,6 @@ spec:
           name: linkerd-config
         name: config
 status: {}
----
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: linkerd-config
-  namespace: Namespace
-  labels:
-    ControllerComponentLabel: controller
-  annotations:
-    CreatedByAnnotation: CliVersion
-data:
-  global: |
-    GlobalConfig
-  proxy: |
-    ProxyConfig
 ---
 ###
 ### Service Profile CRD

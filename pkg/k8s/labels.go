@@ -63,7 +63,7 @@ const (
 
 	// IdentityIssuerExpiryAnnotation indicates the time at which this set of identity
 	// issuer credentials will cease to be valid.
-	IdentityIssuerExpiryAnnotation = "linkerd.io/identity-issuer-expiry"
+	IdentityIssuerExpiryAnnotation = Prefix + "/identity-issuer-expiry"
 
 	// ProxyVersionAnnotation indicates the version of the injected data plane
 	// (e.g. v0.1.3).
@@ -160,11 +160,18 @@ const (
 	 * Component Names
 	 */
 
+	// ConfigConfigMapName is the name of the ConfigMap containing the linkerd controller configuration.
+	ConfigConfigMapName = "linkerd-config"
+
 	// InitContainerName is the name assigned to the injected init container.
 	InitContainerName = "linkerd-init"
 
 	// ProxyContainerName is the name assigned to the injected proxy container.
 	ProxyContainerName = "linkerd-proxy"
+
+	// IdentityEndEntityVolumeName is the name assigned the temporary end-entity
+	// volume mounted into each proxy to store identity credentials.
+	IdentityEndEntityVolumeName = "linkerd-identity-end-entity"
 
 	// ProxyPortName is the name of the Linkerd Proxy's proxy port.
 	ProxyPortName = "linkerd-proxy"
@@ -188,6 +195,16 @@ const (
 
 	// MountPathProxyConfig is the path at which the global config file is mounted.
 	MountPathProxyConfig = MountPathBase + "/config/proxy"
+
+	// MountPathEndEntity is the path at which a tmpfs directory is mounted to
+	// store identity credentials.
+	MountPathEndEntity = MountPathBase + "/identity/end-entity"
+
+	// IdentityServiceAccountTokenPath is the path to the kubernetes service
+	// account token used by proxies to provision identity.
+	//
+	// In the future, this should be changed to a time- and audience-scoped secret.
+	IdentityServiceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 )
 
 // CreatedByAnnotationValue returns the value associated with
@@ -196,12 +213,29 @@ func CreatedByAnnotationValue() string {
 	return fmt.Sprintf("linkerd/cli %s", version.Version)
 }
 
+// GetServiceAccountAndNS returns the pod's serviceaccount and namespace.
+func GetServiceAccountAndNS(pod *corev1.Pod) (sa string, ns string) {
+	sa = pod.Spec.ServiceAccountName
+	if sa == "" {
+		sa = "default"
+	}
+
+	ns = pod.GetNamespace()
+	if ns == "" {
+		ns = "default"
+	}
+
+	return
+}
+
 // GetPodLabels returns the set of prometheus owner labels for a given pod
 func GetPodLabels(ownerKind, ownerName string, pod *corev1.Pod) map[string]string {
 	labels := map[string]string{"pod": pod.Name}
 
 	l5dLabel := KindToL5DLabel(ownerKind)
 	labels[l5dLabel] = ownerName
+
+	labels["serviceaccount"], _ = GetServiceAccountAndNS(pod)
 
 	if controllerNS := pod.Labels[ControllerNSLabel]; controllerNS != "" {
 		labels["control_plane_ns"] = controllerNS
