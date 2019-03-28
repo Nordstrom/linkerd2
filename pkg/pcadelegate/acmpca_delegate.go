@@ -9,17 +9,31 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/acmpca"
+	"github.com/linkerd/linkerd2/pkg/tls"
 )
 
-type IACMClientFactory interface {
-	newClient() (*acmpca.ACMPCA, error)
-}
+type (
+	IACMPCAClientFactory interface {
+		newClient() (ACMPCAClient, error)
+	}
 
-type ACMClientFactory struct {
-	Region string
-}
+	ACMPCAClientFactory struct {
+		Region string
+	}
 
-func (f *ACMClientFactory) newClient() (*acmpca.ACMPCA, error) {
+	ACMPCAClient interface {
+		GetCertificate(input *acmpca.GetCertificateInput) (*acmpca.GetCertificateOutput, error)
+		IssueCertificate(input *acmpca.IssueCertificateInput) (*acmpca.IssueCertificateOutput, error)
+	}
+
+	// Implements the Issuer Interface
+	ACMPCADelegate struct {
+		acmClient ACMPCAClient
+		caARN     string
+	}
+)
+
+func (f *ACMPCAClientFactory) newClient() (ACMPCAClient, error) {
 	// aws session
 	session, sessionErr := session.NewSession(&aws.Config{
 		Region: aws.String(f.Region),
@@ -35,7 +49,7 @@ func (f *ACMClientFactory) newClient() (*acmpca.ACMPCA, error) {
 func EasyNewCADelegate() (*ACMPCADelegate, error) {
 	caARN := string("arn:aws:acm-pca:us-west-2:536616252769:certificate-authority/ba1e0a1b-7057-4ad1-ad35-43188c413755")
 	region := string("us-west-2")
-	factory := ACMClientFactory{
+	factory := ACMPCAClientFactory{
 		Region: region,
 	}
 	acmClient, clientCreationErr := factory.newClient()
@@ -49,7 +63,7 @@ func EasyNewCADelegate() (*ACMPCADelegate, error) {
 	}, nil
 }
 
-func NewCADelegate(clientFactory IACMClientFactory, caARN string) (*ACMPCADelegate, error) {
+func NewCADelegate(clientFactory IACMPCAClientFactory, caARN string) (*ACMPCADelegate, error) {
 	acmClient, clientCreationErr := clientFactory.newClient()
 	if clientCreationErr != nil {
 		return nil, clientCreationErr
@@ -61,36 +75,30 @@ func NewCADelegate(clientFactory IACMClientFactory, caARN string) (*ACMPCADelega
 }
 
 // Implements the Issuer Interface
-type ACMPCADelegate struct {
-	acmClient *acmpca.ACMPCA
-	caARN     string
-}
-
-// Implements the Issuer Interface
-func (c *ACMPCADelegate) IssueEndEntityCrt(csr *x509.CertificateRequest) (Crt, error) {
+func (c *ACMPCADelegate) IssueEndEntityCrt(csr *x509.CertificateRequest) (tls.Crt, error) {
 	certificateARN, issueCertError := c.issueCertificate(c.acmClient, csr)
 	if issueCertError != nil {
-		return Crt{}, issueCertError
+		return tls.Crt{}, issueCertError
 	}
 
 	certificateOutput, getCertificateErr := c.getCertificate(c.acmClient, *certificateARN)
 	if getCertificateErr != nil {
-		return Crt{}, getCertificateErr
+		return tls.Crt{}, getCertificateErr
 	}
 
 	byteCertificate := []byte(*certificateOutput.Certificate)
 	cert, certParseError := x509.ParseCertificate(byteCertificate)
 	if certParseError != nil {
-		return Crt{}, certParseError
+		return tls.Crt{}, certParseError
 	}
 
 	byteTrustChain := []byte(*certificateOutput.CertificateChain)
 	trustChain, certChainParseError := x509.ParseCertificates(byteTrustChain)
 	if certChainParseError != nil {
-		return Crt{}, certChainParseError
+		return tls.Crt{}, certChainParseError
 	}
 
-	crt := Crt{
+	crt := tls.Crt{
 		Certificate: cert,
 		TrustChain:  trustChain,
 	}
@@ -98,7 +106,7 @@ func (c *ACMPCADelegate) IssueEndEntityCrt(csr *x509.CertificateRequest) (Crt, e
 	return crt, nil
 }
 
-func (c *ACMPCADelegate) getCertificate(acmClient *acmpca.ACMPCA, certificateARN string) (*acmpca.GetCertificateOutput, error) {
+func (c *ACMPCADelegate) getCertificate(acmClient ACMPCAClient, certificateARN string) (*acmpca.GetCertificateOutput, error) {
 	getCertificateInput := acmpca.GetCertificateInput{
 		CertificateArn:          &certificateARN,
 		CertificateAuthorityArn: &c.caARN,
@@ -111,7 +119,7 @@ func (c *ACMPCADelegate) getCertificate(acmClient *acmpca.ACMPCA, certificateARN
 	return getCertOutput, nil
 }
 
-func (c *ACMPCADelegate) issueCertificate(acmClient *acmpca.ACMPCA, csr *x509.CertificateRequest) (*string, error) {
+func (c *ACMPCADelegate) issueCertificate(acmClient ACMPCAClient, csr *x509.CertificateRequest) (*string, error) {
 	signingAlgo := acmpca.SigningAlgorithmSha512withrsa
 	validityPeriodType := acmpca.ValidityPeriodTypeDays
 	duration := int64(30)
@@ -133,23 +141,6 @@ func (c *ACMPCADelegate) issueCertificate(acmClient *acmpca.ACMPCA, csr *x509.Ce
 	}
 
 	return arnForCert.CertificateArn, nil
-}
-
-func (c *ACMPCADelegate) testListAuthorities(acmClient *acmpca.ACMPCA) {
-	maxResults := int64(10)
-	listCAInput := acmpca.ListCertificateAuthoritiesInput{
-		MaxResults: &maxResults,
-		//NextToken:  &nextToken,
-	}
-	var res *acmpca.ListCertificateAuthoritiesOutput
-	var errars error
-	res, errars = acmClient.ListCertificateAuthorities(&listCAInput)
-
-	if errars != nil {
-		fmt.Println(errars)
-	} else {
-		fmt.Println(res)
-	}
 }
 
 func (c *ACMPCADelegate) getCSR() ([]byte, error) {
