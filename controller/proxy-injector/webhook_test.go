@@ -7,7 +7,7 @@ import (
 	"github.com/linkerd/linkerd2/controller/gen/config"
 	"github.com/linkerd/linkerd2/controller/proxy-injector/fake"
 	"github.com/linkerd/linkerd2/pkg/inject"
-	"github.com/linkerd/linkerd2/pkg/k8s"
+	pkgK8s "github.com/linkerd/linkerd2/pkg/k8s"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,12 +41,12 @@ var (
 
 func confNsEnabled() *inject.ResourceConfig {
 	return inject.
-		NewResourceConfig(configs).
-		WithNsAnnotations(map[string]string{k8s.ProxyInjectAnnotation: k8s.ProxyInjectEnabled})
+		NewResourceConfig(configs, inject.OriginWebhook).
+		WithNsAnnotations(map[string]string{pkgK8s.ProxyInjectAnnotation: pkgK8s.ProxyInjectEnabled})
 }
 
 func confNsDisabled() *inject.ResourceConfig {
-	return inject.NewResourceConfig(configs).WithNsAnnotations(map[string]string{})
+	return inject.NewResourceConfig(configs, inject.OriginWebhook).WithNsAnnotations(map[string]string{})
 }
 
 func TestGetPatch(t *testing.T) {
@@ -80,28 +80,10 @@ func TestGetPatch(t *testing.T) {
 				expected: true,
 			},
 			{
-				filename: "deployment-inject-disabled.yaml",
-				ns:       nsEnabled,
-				conf:     confNsEnabled(),
-				expected: false,
-			},
-			{
-				filename: "deployment-inject-empty.yaml",
-				ns:       nsDisabled,
-				conf:     confNsDisabled(),
-				expected: false,
-			},
-			{
 				filename: "deployment-inject-enabled.yaml",
 				ns:       nsDisabled,
 				conf:     confNsDisabled(),
 				expected: true,
-			},
-			{
-				filename: "deployment-inject-disabled.yaml",
-				ns:       nsDisabled,
-				conf:     confNsDisabled(),
-				expected: false,
 			},
 		}
 
@@ -115,7 +97,12 @@ func TestGetPatch(t *testing.T) {
 
 				fakeReq := getFakeReq(deployment)
 				fullConf := testCase.conf.WithKind(fakeReq.Kind.Kind)
-				p, _, err := fullConf.GetPatch(fakeReq.Object.Raw, inject.ShouldInjectWebhook)
+				_, err = fullConf.ParseMetaAndYAML(fakeReq.Object.Raw)
+				if err != nil {
+					t.Fatal(err)
+				}
+
+				p, err := fullConf.GetPatch(fakeReq.Object.Raw)
 				if err != nil {
 					t.Fatalf("Unexpected PatchForAdmissionRequest error: %s", err)
 				}
@@ -142,7 +129,7 @@ func TestGetPatch(t *testing.T) {
 
 		fakeReq := getFakeReq(deployment)
 		conf := confNsDisabled().WithKind(fakeReq.Kind.Kind)
-		p, _, err := conf.GetPatch(fakeReq.Object.Raw, inject.ShouldInjectWebhook)
+		p, err := conf.GetPatch(fakeReq.Object.Raw)
 		if err != nil {
 			t.Fatalf("Unexpected PatchForAdmissionRequest error: %s", err)
 		}
