@@ -1,20 +1,27 @@
 package pcadelegate
 
 import (
+	"errors"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/service/acmpca"
+	"github.com/linkerd/linkerd2/pkg/pcadelegate/test_helpers"
 )
 
-type MockACMClientFactory struct{}
-
-func (f *MockACMClientFactory) newClient() (ACMPCAClient, error) {
-	dummyClient := acmpca.ACMPCA{
-		Client: nil,
+func TestFailedIssueCert(t *testing.T) {
+	expectedError := errors.New("issueCertError")
+	myClient := test_helpers.MockACMClient{
+		IssueCertError: expectedError,
 	}
-	return &dummyClient, nil
-}
 
-func TestBasics(t *testing.T) {
+	subject := ACMPCADelegate{
+		acmClient: myClient,
+		caARN:     "myARN",
+	}
 
+	realCsr := test_helpers.CreateCSR()
+	_, err := subject.IssueEndEntityCrt(&realCsr)
+
+	if err != expectedError {
+		t.Fail()
+	}
 }

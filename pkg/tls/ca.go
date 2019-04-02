@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"math/big"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type (
@@ -166,6 +168,9 @@ func (ca *CA) GenerateEndEntityCred(dnsName string) (*Cred, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	log.Errorf("*************** dnsName == %s", dnsName)
+	log.Errorf("*************** pkixName == %s", pkix.Name{CommonName: dnsName})
 
 	csr := x509.CertificateRequest{
 		Subject:   pkix.Name{CommonName: dnsName},
