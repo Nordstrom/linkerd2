@@ -1,5 +1,5 @@
 ## compile controller services
-FROM gcr.io/linkerd-io/go-deps:9f28f0b4 as golang
+FROM gcr.io/linkerd-io/go-deps:f39dc9a4 as golang
 WORKDIR /go/src/github.com/linkerd/linkerd2
 COPY controller/gen controller/gen
 COPY pkg pkg
@@ -9,6 +9,7 @@ COPY controller controller
 RUN CGO_ENABLED=0 GOOS=linux go install ./pkg/...
 RUN CGO_ENABLED=0 GOOS=linux go install ./controller/cmd/...
 
+# add sweet trusted certs
 FROM alpine:latest as certs
 RUN apk --update add ca-certificates
 

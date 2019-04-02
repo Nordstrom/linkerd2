@@ -11,7 +11,7 @@ import (
 
 func TestRender(t *testing.T) {
 	defaultOptions := testInstallOptions()
-	defaultValues, defaultConfig, err := defaultOptions.validateAndBuild()
+	defaultValues, defaultConfig, err := defaultOptions.validateAndBuild(nil)
 	if err != nil {
 		t.Fatalf("Unexpected error validating options: %v", err)
 	}
@@ -41,31 +41,46 @@ func TestRender(t *testing.T) {
 		ControllerUID:            2103,
 		EnableH2Upgrade:          true,
 		NoInitContainer:          false,
-		GlobalConfig:             "GlobalConfig",
-		ProxyConfig:              "ProxyConfig",
-		ControllerReplicas:       1,
-		Identity:                 defaultValues.Identity,
+		Configs: configJSONs{
+			Global:  "GlobalConfig",
+			Proxy:   "ProxyConfig",
+			Install: "InstallConfig",
+		},
+		ControllerReplicas: 1,
+		Identity:           defaultValues.Identity,
 	}
 
 	haOptions := testInstallOptions()
+	haOptions.recordedFlags = []*config.Install_Flag{{Name: "ha", Value: "true"}}
 	haOptions.highAvailability = true
-	haValues, haConfig, _ := haOptions.validateAndBuild()
+	haValues, haConfig, _ := haOptions.validateAndBuild(nil)
 
 	haWithOverridesOptions := testInstallOptions()
+	haWithOverridesOptions.recordedFlags = []*config.Install_Flag{
+		{Name: "ha", Value: "true"},
+		{Name: "controller-replicas", Value: "2"},
+		{Name: "proxy-cpu-request", Value: "400m"},
+		{Name: "proxy-memory-request", Value: "300Mi"},
+	}
 	haWithOverridesOptions.highAvailability = true
 	haWithOverridesOptions.controllerReplicas = 2
 	haWithOverridesOptions.proxyCPURequest = "400m"
 	haWithOverridesOptions.proxyMemoryRequest = "300Mi"
-	haWithOverridesValues, haWithOverridesConfig, _ := haWithOverridesOptions.validateAndBuild()
+	haWithOverridesValues, haWithOverridesConfig, _ := haWithOverridesOptions.validateAndBuild(nil)
 
 	noInitContainerOptions := testInstallOptions()
+	noInitContainerOptions.recordedFlags = []*config.Install_Flag{{Name: "linkerd-cni-enabled", Value: "true"}}
 	noInitContainerOptions.noInitContainer = true
-	noInitContainerValues, noInitContainerConfig, _ := noInitContainerOptions.validateAndBuild()
+	noInitContainerValues, noInitContainerConfig, _ := noInitContainerOptions.validateAndBuild(nil)
 
 	noInitContainerWithProxyAutoInjectOptions := testInstallOptions()
+	noInitContainerWithProxyAutoInjectOptions.recordedFlags = []*config.Install_Flag{
+		{Name: "linkerd-cni-enabled", Value: "true"},
+		{Name: "proxy-auto-inject", Value: "true"},
+	}
 	noInitContainerWithProxyAutoInjectOptions.noInitContainer = true
 	noInitContainerWithProxyAutoInjectOptions.proxyAutoInject = true
-	noInitContainerWithProxyAutoInjectValues, noInitContainerWithProxyAutoInjectConfig, _ := noInitContainerWithProxyAutoInjectOptions.validateAndBuild()
+	noInitContainerWithProxyAutoInjectValues, noInitContainerWithProxyAutoInjectConfig, _ := noInitContainerWithProxyAutoInjectOptions.validateAndBuild(nil)
 
 	testCases := []struct {
 		values         *installValues
@@ -97,7 +112,9 @@ func TestRender(t *testing.T) {
 func testInstallOptions() *installOptions {
 	o := newInstallOptionsWithDefaults()
 	o.ignoreCluster = true
-	o.overrideUUIDForTest = "deaab91a-f4ab-448a-b7d1-c832a2fa0a60"
+	o.generateUUID = func() string {
+		return "deaab91a-f4ab-448a-b7d1-c832a2fa0a60"
+	}
 	o.identityOptions.crtPEMFile = filepath.Join("testdata", "crt.pem")
 	o.identityOptions.keyPEMFile = filepath.Join("testdata", "key.pem")
 	o.identityOptions.trustPEMFile = filepath.Join("testdata", "trust-anchors.pem")

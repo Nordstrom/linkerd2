@@ -17,6 +17,7 @@ import (
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"sigs.k8s.io/yaml"
 )
 
@@ -101,11 +102,16 @@ sub-folders, or coming from stdin.`,
 		},
 	}
 
-	addProxyConfigFlags(cmd, options.proxyConfigOptions)
-	cmd.PersistentFlags().BoolVar(
+	flags := options.proxyConfigOptions.flagSet(pflag.ExitOnError)
+	flags.BoolVar(
 		&options.disableIdentity, "disable-identity", options.disableIdentity,
 		"Disables resources from participating in TLS identity",
 	)
+	flags.BoolVar(
+		&options.ignoreCluster, "ignore-cluster", options.ignoreCluster,
+		"Ignore the current Kubernetes cluster when checking for existing cluster configuration (default false)",
+	)
+	cmd.PersistentFlags().AddFlagSet(flags)
 
 	return cmd
 }
@@ -294,7 +300,7 @@ func (options *injectOptions) fetchConfigsOrDefault() (*config.All, error) {
 // overrideConfigs uses command-line overrides to update the provided configs.
 // the overrideAnnotations map keeps track of which configs are overridden, by
 // storing the corresponding annotations and values.
-func (options *injectOptions) overrideConfigs(configs *config.All, overrideAnnotations map[string]string) {
+func (options *proxyConfigOptions) overrideConfigs(configs *config.All, overrideAnnotations map[string]string) {
 	if options.linkerdVersion != "" {
 		configs.Global.Version = options.linkerdVersion
 	}
@@ -360,9 +366,9 @@ func (options *injectOptions) overrideConfigs(configs *config.All, overrideAnnot
 	// keep track of this option because its true/false value results in different
 	// values being assigned to the LINKERD2_PROXY_DESTINATION_PROFILE_SUFFIXES
 	// env var. Its annotation is added only if its value is true.
-	configs.Proxy.DisableExternalProfiles = options.disableExternalProfiles
-	if options.disableExternalProfiles {
-		overrideAnnotations[k8s.ProxyDisableExternalProfilesAnnotation] = "true"
+	configs.Proxy.DisableExternalProfiles = !options.enableExternalProfiles
+	if options.enableExternalProfiles {
+		overrideAnnotations[k8s.ProxyEnableExternalProfilesAnnotation] = "true"
 	}
 
 	if options.proxyCPURequest != "" {
