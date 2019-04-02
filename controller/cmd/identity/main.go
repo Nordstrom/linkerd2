@@ -17,8 +17,8 @@ import (
 	"github.com/linkerd/linkerd2/pkg/flags"
 	"github.com/linkerd/linkerd2/pkg/identity"
 	consts "github.com/linkerd/linkerd2/pkg/k8s"
-	"github.com/linkerd/linkerd2/pkg/pcadelegate"
-	"github.com/linkerd/linkerd2/pkg/tls"
+	pcadelegate "github.com/linkerd/linkerd2/pkg/pcadelegate"
+	tls "github.com/linkerd/linkerd2/pkg/tls"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )

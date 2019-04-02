@@ -1,4 +1,4 @@
-package tls
+package pcadelegate
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 
 type MockACMClientFactory struct{}
 
-func (f *MockACMClientFactory) newClient() (*acmpca.ACMPCA, error) {
+func (f *MockACMClientFactory) newClient() (ACMPCAClient, error) {
 	dummyClient := acmpca.ACMPCA{
 		Client: nil,
 	}
