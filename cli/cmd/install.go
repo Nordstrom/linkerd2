@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/ptypes"
+	"github.com/google/uuid"
 	"github.com/linkerd/linkerd2/cli/static"
 	pb "github.com/linkerd/linkerd2/controller/gen/config"
 	"github.com/linkerd/linkerd2/pkg/config"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	"github.com/linkerd/linkerd2/pkg/tls"
 	"github.com/linkerd/linkerd2/pkg/version"
-	uuid "github.com/satori/go.uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -63,6 +63,7 @@ type (
 		PrometheusResources,
 		ProxyInjectorResources,
 		PublicAPIResources,
+		SPValidatorResources,
 		TapResources,
 		WebResources *resources
 
@@ -106,6 +107,7 @@ type (
 		highAvailability   bool
 		controllerUID      int64
 		disableH2Upgrade   bool
+		noInitContainer    bool
 		identityOptions    *installIdentityOptions
 		*proxyConfigOptions
 
@@ -145,6 +147,7 @@ const (
 	resourcesTemplateName      = "templates/_resources.yaml"
 	serviceprofileTemplateName = "templates/serviceprofile.yaml"
 	proxyInjectorTemplateName  = "templates/proxy_injector.yaml"
+	spValidatorTemplateName    = "templates/sp_validator.yaml"
 )
 
 // newInstallOptionsWithDefaults initializes install options with default
@@ -161,6 +164,7 @@ func newInstallOptionsWithDefaults() *installOptions {
 		highAvailability:   false,
 		controllerUID:      2103,
 		disableH2Upgrade:   false,
+		noInitContainer:    false,
 		proxyConfigOptions: &proxyConfigOptions{
 			linkerdVersion:         version.Version,
 			ignoreCluster:          false,
@@ -181,12 +185,15 @@ func newInstallOptionsWithDefaults() *installOptions {
 			proxyCPULimit:          "",
 			proxyMemoryLimit:       "",
 			enableExternalProfiles: false,
-			noInitContainer:        false,
 		},
 		identityOptions: newInstallIdentityOptionsWithDefaults(),
 
 		generateUUID: func() string {
-			return uuid.NewV4().String()
+			id, err := uuid.NewRandom()
+			if err != nil {
+				log.Fatalf("Could not generate UUID: %s", err)
+			}
+			return id.String()
 		},
 	}
 }
@@ -255,6 +262,7 @@ func (options *installOptions) validateAndBuild(flags *pflag.FlagSet) (*installV
 }
 
 // recordableFlagSet returns flags usable during install or upgrade.
+//nolint:unparam
 func (options *installOptions) recordableFlagSet(e pflag.ErrorHandling) *pflag.FlagSet {
 	flags := pflag.NewFlagSet("install", e)
 
@@ -264,6 +272,11 @@ func (options *installOptions) recordableFlagSet(e pflag.ErrorHandling) *pflag.F
 		&options.controllerReplicas, "controller-replicas", options.controllerReplicas,
 		"Replicas of the controller to deploy",
 	)
+
+	flags.BoolVar(&options.noInitContainer, "linkerd-cni-enabled", options.noInitContainer,
+		"Experimental: Omit the proxy-init container when injecting the proxy; requires the linkerd-cni plugin to already be installed",
+	)
+
 	flags.StringVar(
 		&options.controllerLogLevel, "controller-log-level", options.controllerLogLevel,
 		"Log level for the controller and web components",
@@ -299,7 +312,7 @@ func (options *installOptions) recordableFlagSet(e pflag.ErrorHandling) *pflag.F
 // installOnlyFlagSet includes flags that are only accessible at install-time
 // and not at upgrade-time.
 func (options *installOptions) installOnlyFlagSet(e pflag.ErrorHandling) *pflag.FlagSet {
-	flags := options.recordableFlagSet(e)
+	flags := pflag.NewFlagSet("install-only", e)
 
 	flags.StringVar(
 		&options.identityOptions.trustDomain, "identity-trust-domain", options.identityOptions.trustDomain,
@@ -369,7 +382,7 @@ func (options *installOptions) validate() error {
 		}
 
 		if options.proxyCPURequest == "" {
-			options.proxyCPURequest = "10m"
+			options.proxyCPURequest = "100m"
 		}
 
 		if options.proxyMemoryRequest == "" {
@@ -420,25 +433,36 @@ func (options *installOptions) buildValuesWithoutIdentity(configs *pb.All) (*ins
 			Proxy:   proxyJSON,
 			Install: installJSON,
 		},
+
+		DestinationResources:   &resources{},
+		GrafanaResources:       &resources{},
+		IdentityResources:      &resources{},
+		PrometheusResources:    &resources{},
+		ProxyInjectorResources: &resources{},
+		PublicAPIResources:     &resources{},
+		SPValidatorResources:   &resources{},
+		TapResources:           &resources{},
+		WebResources:           &resources{},
 	}
 
 	if options.highAvailability {
 		defaultConstraints := &resources{
-			CPU:    constraints{Request: "20m"},
+			CPU:    constraints{Request: "100m"},
 			Memory: constraints{Request: "50Mi"},
 		}
 		// Copy constraints to each so that further modification isn't global.
-		values.DestinationResources = &*defaultConstraints
-		values.GrafanaResources = &*defaultConstraints
-		values.ProxyInjectorResources = &*defaultConstraints
-		values.PublicAPIResources = &*defaultConstraints
-		values.TapResources = &*defaultConstraints
-		values.WebResources = &*defaultConstraints
+		*values.DestinationResources = *defaultConstraints
+		*values.GrafanaResources = *defaultConstraints
+		*values.ProxyInjectorResources = *defaultConstraints
+		*values.PublicAPIResources = *defaultConstraints
+		*values.SPValidatorResources = *defaultConstraints
+		*values.TapResources = *defaultConstraints
+		*values.WebResources = *defaultConstraints
 
-		values.IdentityResources = &resources{
-			CPU:    constraints{Request: "10m"},
-			Memory: constraints{Request: "10Mi"},
-		}
+		// The identity controller maintains no internal state, so it need not request
+		// 50Mi.
+		*values.IdentityResources = *defaultConstraints
+		values.IdentityResources.Memory = constraints{Request: "10Mi"}
 
 		values.PrometheusResources = &resources{
 			CPU:    constraints{Request: "300m"},
@@ -478,6 +502,7 @@ func (values *installValues) render(w io.Writer, configs *pb.All) error {
 		{Name: prometheusTemplateName},
 		{Name: grafanaTemplateName},
 		{Name: proxyInjectorTemplateName},
+		{Name: spValidatorTemplateName},
 	}
 
 	// Read templates into bytes

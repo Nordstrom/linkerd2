@@ -121,11 +121,11 @@ func generateAndStoreKey(p string) (key *ecdsa.PrivateKey, err error) {
 }
 
 func generateAndStoreCSR(p, id string, key *ecdsa.PrivateKey) ([]byte, error) {
+	// TODO do proper DNS name validation.
 	if id == "" {
 		return nil, errors.New("a non-empty identity is required")
 	}
 
-	// TODO do proper DNS name validation.
 	csr := x509.CertificateRequest{
 		Subject:  pkix.Name{CommonName: id},
 		DNSNames: []string{id},

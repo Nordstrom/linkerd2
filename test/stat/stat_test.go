@@ -30,7 +30,6 @@ type rowStat struct {
 	p50Latency         string
 	p95Latency         string
 	p99Latency         string
-	tlsPercent         string
 	tcpOpenConnections string
 }
 
@@ -46,7 +45,7 @@ type rowStat struct {
 // requesting, and the test will pass.
 func TestCliStatForLinkerdNamespace(t *testing.T) {
 
-	pods, err := TestHelper.GetPodsForDeployment(TestHelper.GetLinkerdNamespace(), "linkerd-prometheus")
+	pods, err := TestHelper.GetPodNamesForDeployment(TestHelper.GetLinkerdNamespace(), "linkerd-prometheus")
 	if err != nil {
 		t.Fatalf("Failed to get pods for prometheus: %s", err)
 	}
@@ -55,7 +54,7 @@ func TestCliStatForLinkerdNamespace(t *testing.T) {
 	}
 	prometheusPod := pods[0]
 
-	pods, err = TestHelper.GetPodsForDeployment(TestHelper.GetLinkerdNamespace(), "linkerd-controller")
+	pods, err = TestHelper.GetPodNamesForDeployment(TestHelper.GetLinkerdNamespace(), "linkerd-controller")
 	if err != nil {
 		t.Fatalf("Failed to get pods for controller: %s", err)
 	}
@@ -69,18 +68,17 @@ func TestCliStatForLinkerdNamespace(t *testing.T) {
 	for _, tt := range []struct {
 		args         []string
 		expectedRows map[string]string
-		skipTLS      bool
 	}{
 		{
 			args: []string{"stat", "deploy", "-n", TestHelper.GetLinkerdNamespace()},
 			expectedRows: map[string]string{
-				"linkerd-controller": "1/1",
-				"linkerd-grafana":    "1/1",
-				"linkerd-identity":   "1/1",
-				"linkerd-prometheus": "1/1",
-				"linkerd-web":        "1/1",
+				"linkerd-controller":   "1/1",
+				"linkerd-grafana":      "1/1",
+				"linkerd-identity":     "1/1",
+				"linkerd-prometheus":   "1/1",
+				"linkerd-sp-validator": "1/1",
+				"linkerd-web":          "1/1",
 			},
-			skipTLS: true,
 		},
 		{
 			args: []string{"stat", "po", "-n", TestHelper.GetLinkerdNamespace(), "--from", "deploy/linkerd-controller"},
@@ -109,9 +107,8 @@ func TestCliStatForLinkerdNamespace(t *testing.T) {
 		{
 			args: []string{"stat", "ns", TestHelper.GetLinkerdNamespace()},
 			expectedRows: map[string]string{
-				TestHelper.GetLinkerdNamespace(): "5/5",
+				TestHelper.GetLinkerdNamespace(): "6/6",
 			},
-			skipTLS: true,
 		},
 		{
 			args: []string{"stat", "po", "-n", TestHelper.GetLinkerdNamespace(), "--to", "au/" + prometheusAuthority},
@@ -140,7 +137,7 @@ func TestCliStatForLinkerdNamespace(t *testing.T) {
 				}
 
 				for name, meshed := range tt.expectedRows {
-					if err := validateRowStats(name, meshed, rowStats, tt.skipTLS); err != nil {
+					if err := validateRowStats(name, meshed, rowStats); err != nil {
 						return err
 					}
 				}
@@ -178,7 +175,7 @@ func parseRows(out string, expectedRowCount int) (map[string]*rowStat, error) {
 	for _, row := range rows {
 		fields := strings.Fields(row)
 
-		expectedColumnCount := 9
+		expectedColumnCount := 8
 		if len(fields) != expectedColumnCount {
 			return nil, fmt.Errorf(
 				"Expected [%d] columns in stat output, got [%d]; full output:\n%s",
@@ -193,15 +190,14 @@ func parseRows(out string, expectedRowCount int) (map[string]*rowStat, error) {
 			p50Latency:         fields[4],
 			p95Latency:         fields[5],
 			p99Latency:         fields[6],
-			tlsPercent:         fields[7],
-			tcpOpenConnections: fields[8],
+			tcpOpenConnections: fields[7],
 		}
 	}
 
 	return rowStats, nil
 }
 
-func validateRowStats(name, expectedMeshCount string, rowStats map[string]*rowStat, skipTLS bool) error {
+func validateRowStats(name, expectedMeshCount string, rowStats map[string]*rowStat) error {
 	stat, ok := rowStats[name]
 	if !ok {
 		return fmt.Errorf("No stats found for [%s]", name)
@@ -236,14 +232,6 @@ func validateRowStats(name, expectedMeshCount string, rowStats map[string]*rowSt
 	if !strings.HasSuffix(stat.p99Latency, "ms") {
 		return fmt.Errorf("Unexpected p99 latency for [%s], got [%s]",
 			name, stat.p99Latency)
-	}
-
-	if !skipTLS {
-		expectedTLSRate := "100%"
-		if stat.tlsPercent != expectedTLSRate {
-			return fmt.Errorf("Expected tls rate [%s] for [%s], got [%s]",
-				expectedTLSRate, name, stat.tlsPercent)
-		}
 	}
 
 	if stat.tcpOpenConnections != "-" {

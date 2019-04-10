@@ -25,6 +25,13 @@ func Proxy(filepath string) (*pb.Proxy, error) {
 	return config, err
 }
 
+// Install returns the Install protobuf config from the linkerd-config ConfigMap
+func Install(filepath string) (*pb.Install, error) {
+	config := &pb.Install{}
+	err := unmarshalFile(filepath, config)
+	return config, err
+}
+
 func unmarshalFile(filepath string, msg proto.Message) error {
 	configJSON, err := ioutil.ReadFile(filepath)
 	if err != nil {
@@ -40,6 +47,12 @@ func unmarshalFile(filepath string, msg proto.Message) error {
 }
 
 func unmarshal(json string, msg proto.Message) error {
+	// If a config is missing, then just leave the message as nil and return
+	// without an error.
+	if json == "" {
+		return nil
+	}
+
 	// If we're using older code to read a newer config, blowing up during decoding
 	// is not helpful. We should detect that through other means.
 	u := jsonpb.Unmarshaler{AllowUnknownFields: true}
@@ -52,15 +65,15 @@ func FromConfigMap(configMap map[string]string) (*pb.All, error) {
 	c := &pb.All{Global: &pb.Global{}, Proxy: &pb.Proxy{}, Install: &pb.Install{}}
 
 	if err := unmarshal(configMap["global"], c.Global); err != nil {
-		return nil, fmt.Errorf("global: %s", err)
+		return nil, fmt.Errorf("invalid global config: %s", err)
 	}
 
 	if err := unmarshal(configMap["proxy"], c.Proxy); err != nil {
-		return nil, fmt.Errorf("proxy: %s", err)
+		return nil, fmt.Errorf("invalid proxy config: %s", err)
 	}
 
 	if err := unmarshal(configMap["install"], c.Install); err != nil {
-		return nil, fmt.Errorf("install: %s", err)
+		return nil, fmt.Errorf("invalid install config: %s", err)
 	}
 
 	return c, nil

@@ -148,6 +148,9 @@ const (
 	// disableExternalProfilesAnnotation config.
 	ProxyEnableExternalProfilesAnnotation = ProxyConfigAnnotationsPrefix + "/enable-external-profiles"
 
+	// ProxyVersionOverrideAnnotation can be used to override the proxy version config.
+	ProxyVersionOverrideAnnotation = ProxyConfigAnnotationsPrefix + "/proxy-version"
+
 	// IdentityModeDefault is assigned to IdentityModeAnnotation to
 	// use the control plane's default identity scheme.
 	IdentityModeDefault = "default"
@@ -188,9 +191,17 @@ const (
 	// ProxyAdminPortName is the name of the Linkerd Proxy's metrics port.
 	ProxyAdminPortName = "linkerd-admin"
 
-	// ProxyInjectorWebhookConfig is the name of the mutating webhook
-	// configuration resource of the proxy-injector webhook.
-	ProxyInjectorWebhookConfig = "linkerd-proxy-injector-webhook-config"
+	// ProxyInjectorWebhookServiceName is the name of the mutating webhook service
+	ProxyInjectorWebhookServiceName = "linkerd-proxy-injector"
+
+	// ProxyInjectorWebhookConfigName is the name of the mutating webhook configuration
+	ProxyInjectorWebhookConfigName = ProxyInjectorWebhookServiceName + "-webhook-config"
+
+	// SPValidatorWebhookServiceName is the name of the validating webhook service
+	SPValidatorWebhookServiceName = "linkerd-sp-validator"
+
+	// SPValidatorWebhookConfigName is the name of the validating webhook configuration
+	SPValidatorWebhookConfigName = SPValidatorWebhookServiceName + "-webhook-config"
 
 	/*
 	 * Mount paths
@@ -208,6 +219,9 @@ const (
 
 	// MountPathProxyConfig is the path at which the global config file is mounted.
 	MountPathProxyConfig = MountPathBase + "/config/proxy"
+
+	// MountPathInstallConfig is the path at which the install config file is mounted.
+	MountPathInstallConfig = MountPathBase + "/config/install"
 
 	// MountPathEndEntity is the path at which a tmpfs directory is mounted to
 	// store identity credentials.
