@@ -30,7 +30,7 @@ type (
 
 func EasyNewCADelegate() (*ACMPCADelegate, error) {
 	region := string("us-west-2")
-	caARN := string("arn:aws:acm-pca:us-west-2:536616252769:certificate-authority/46e8fcd0-d615-42a1-9894-4dc45944d554")
+	caARN := string("arn:aws:acm-pca:us-west-2:536616252769:certificate-authority/8b308bd8-f508-416e-9775-5b31f195e21a")
 	return NewCADelegate(region, caARN)
 }
 
