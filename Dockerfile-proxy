@@ -4,6 +4,7 @@ FROM gcr.io/linkerd-io/base:2019-02-19.01 as fetch
 RUN apt-get update && apt-get install -y ca-certificates
 WORKDIR /build
 COPY bin/fetch-proxy bin/fetch-proxy
+COPY linkerd2-proxy-capino.tar.gz linkerd2-proxy-capino.tar.gz
 ARG PROXY_VERSION
 RUN (proxy=$(bin/fetch-proxy $PROXY_VERSION) && \
     version=$(basename "$proxy" | sed 's/linkerd2-proxy-//') && \
