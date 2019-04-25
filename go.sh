@@ -7,7 +7,7 @@ echo "killing old cluster"
 kubectl delete -f ld_out.yaml
 
 echo "writing out LD file"
-$LD/bin/linkerd install --identity-issuer-certificate-file ~/source/myCA/grampleberg/identity.crt --identity-issuer-key-file ~/source/myCA/grampleberg/identity.key  --identity-trust-anchors-file ~/source/myCA/certs/onetruecacert.pem --linkerd-cni-enabled > ld_in.yaml
+$LD/bin/linkerd install --ignore-cluster --identity-issuer-certificate-file /Users/x27s/Desktop/temp/root/ca/private/identity.crt --identity-issuer-key-file /Users/x27s/Desktop/temp/root/ca/private/identity.key  --identity-trust-anchors-file /Users/x27s/Desktop/temp/root/ca/certs/ca_sha1.cert.pem --linkerd-cni-enabled > ld_in.yaml
 
 echo "copying ld_in to ld_out"
 cp ld_in.yaml ld_out.yaml

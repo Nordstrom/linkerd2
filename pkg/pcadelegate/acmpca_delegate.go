@@ -30,7 +30,7 @@ type (
 
 func EasyNewCADelegate() (*ACMPCADelegate, error) {
 	region := string("us-west-2")
-	caARN := string("arn:aws:acm-pca:us-west-2:536616252769:certificate-authority/8b308bd8-f508-416e-9775-5b31f195e21a")
+	caARN := string("arn:aws:acm-pca:us-west-2:536616252769:certificate-authority/70429e36-3d24-4fc1-9308-841e469c5409")
 	return NewCADelegate(region, caARN)
 }
 
@@ -209,7 +209,7 @@ func (c ACMPCADelegate) getCertificate(acmClient ACMPCAClient, certificateARN st
 }
 
 func (c ACMPCADelegate) issueCertificate(acmClient ACMPCAClient, csr *x509.CertificateRequest) (*string, error) {
-	signingAlgo := acmpca.SigningAlgorithmSha512withrsa
+	signingAlgo := acmpca.SigningAlgorithmSha256withrsa
 	validityPeriodType := acmpca.ValidityPeriodTypeDays
 	duration := int64(30)
 	validity := acmpca.Validity{
