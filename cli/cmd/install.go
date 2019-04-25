@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/golang/protobuf/ptypes"
@@ -15,6 +17,7 @@ import (
 	"github.com/linkerd/linkerd2/cli/static"
 	pb "github.com/linkerd/linkerd2/controller/gen/config"
 	"github.com/linkerd/linkerd2/pkg/config"
+	"github.com/linkerd/linkerd2/pkg/healthcheck"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	"github.com/linkerd/linkerd2/pkg/tls"
 	"github.com/linkerd/linkerd2/pkg/version"
@@ -34,6 +37,8 @@ import (
 
 type (
 	installValues struct {
+		stage string
+
 		Namespace                string
 		ControllerImage          string
 		WebImage                 string
@@ -48,7 +53,6 @@ type (
 		ControllerComponentLabel string
 		CreatedByAnnotation      string
 		ProxyContainerName       string
-		ProxyAutoInjectEnabled   bool
 		ProxyInjectAnnotation    string
 		ProxyInjectDisabled      string
 		ControllerUID            int64
@@ -101,14 +105,15 @@ type (
 	// in order to hold values for command line flags that apply to both inject and
 	// install.
 	installOptions struct {
-		controllerReplicas uint
-		controllerLogLevel string
-		proxyAutoInject    bool
-		highAvailability   bool
-		controllerUID      int64
-		disableH2Upgrade   bool
-		noInitContainer    bool
-		identityOptions    *installIdentityOptions
+		controlPlaneVersion string
+		controllerReplicas  uint
+		controllerLogLevel  string
+		highAvailability    bool
+		controllerUID       int64
+		disableH2Upgrade    bool
+		noInitContainer     bool
+		skipChecks          bool
+		identityOptions     *installIdentityOptions
 		*proxyConfigOptions
 
 		recordedFlags []*pb.Install_Flag
@@ -129,6 +134,9 @@ type (
 )
 
 const (
+	configStage       = "config"
+	controlPlaneStage = "control-plane"
+
 	prometheusImage                   = "prom/prometheus:v2.7.1"
 	prometheusProxyOutboundCapacity   = 10000
 	defaultControllerReplicas         = 1
@@ -136,18 +144,6 @@ const (
 	defaultIdentityTrustDomain        = "cluster.local"
 	defaultIdentityIssuanceLifetime   = 24 * time.Hour
 	defaultIdentityClockSkewAllowance = 20 * time.Second
-
-	nsTemplateName             = "templates/namespace.yaml"
-	configTemplateName         = "templates/config.yaml"
-	identityTemplateName       = "templates/identity.yaml"
-	controllerTemplateName     = "templates/controller.yaml"
-	webTemplateName            = "templates/web.yaml"
-	prometheusTemplateName     = "templates/prometheus.yaml"
-	grafanaTemplateName        = "templates/grafana.yaml"
-	resourcesTemplateName      = "templates/_resources.yaml"
-	serviceprofileTemplateName = "templates/serviceprofile.yaml"
-	proxyInjectorTemplateName  = "templates/proxy_injector.yaml"
-	spValidatorTemplateName    = "templates/sp_validator.yaml"
 )
 
 // newInstallOptionsWithDefaults initializes install options with default
@@ -158,15 +154,15 @@ const (
 // injection-time.
 func newInstallOptionsWithDefaults() *installOptions {
 	return &installOptions{
-		controllerReplicas: defaultControllerReplicas,
-		controllerLogLevel: "info",
-		proxyAutoInject:    false,
-		highAvailability:   false,
-		controllerUID:      2103,
-		disableH2Upgrade:   false,
-		noInitContainer:    false,
+		controlPlaneVersion: version.Version,
+		controllerReplicas:  defaultControllerReplicas,
+		controllerLogLevel:  "info",
+		highAvailability:    false,
+		controllerUID:       2103,
+		disableH2Upgrade:    false,
+		noInitContainer:     false,
 		proxyConfigOptions: &proxyConfigOptions{
-			linkerdVersion:         version.Version,
+			proxyVersion:           version.Version,
 			ignoreCluster:          false,
 			proxyImage:             defaultDockerRegistry + "/proxy",
 			initImage:              defaultDockerRegistry + "/proxy-init",
@@ -209,20 +205,47 @@ func newInstallIdentityOptionsWithDefaults() *installIdentityOptions {
 func newCmdInstall() *cobra.Command {
 	options := newInstallOptionsWithDefaults()
 
-	// The base flags are recorded separately s that they can be serialized into
+	// The base flags are recorded separately so that they can be serialized into
 	// the configuration in validateAndBuild.
 	flags := options.recordableFlagSet()
+	installOnlyFlags := options.installOnlyFlagSet()
 
 	cmd := &cobra.Command{
-		Use:   "install [flags]",
-		Short: "Output Kubernetes configs to install Linkerd",
-		Long:  "Output Kubernetes configs to install Linkerd.",
+		Use:       fmt.Sprintf("install [%s|%s] [flags]", configStage, controlPlaneStage),
+		Args:      cobra.OnlyValidArgs,
+		ValidArgs: []string{configStage, controlPlaneStage},
+		Short:     "Output Kubernetes configs to install Linkerd",
+		Long: `Output Kubernetes configs to install Linkerd.
+
+This command provides Kubernetes configs necessary to install the Linkerd
+control-plane.`,
+		Example: `  # Default install.
+  linkerd install | kubectl apply -f -
+
+  # Installation may also be broken up into two stages, by user privilege.
+  # First stage requires cluster-level privileges.
+  linkerd install config | kubectl apply -f -
+  # Second stage requires namespace-level privileges.
+  linkerd install control-plane | kubectl apply -f -
+
+  # Install Linkerd into a non-default namespace.
+  linkerd install config -l linkerdtest | kubectl apply -f -
+  linkerd install control-plane -l linkerdtest | kubectl apply -f -`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			stage, err := validateArgs(args, flags, installOnlyFlags)
+			if err != nil {
+				return err
+			}
 			if !options.ignoreCluster {
+				// TODO: consider cobra.SilenceUsage, so we can return errors from
+				// `RunE`, rather than calling `os.Exit(1)`
 				exitIfClusterExists()
 			}
+			if !options.skipChecks && stage == controlPlaneStage {
+				exitIfNamespaceDoesNotExist()
+			}
 
-			values, configs, err := options.validateAndBuild(flags)
+			values, configs, err := options.validateAndBuild(stage, flags)
 			if err != nil {
 				return err
 			}
@@ -234,12 +257,12 @@ func newCmdInstall() *cobra.Command {
 	cmd.PersistentFlags().AddFlagSet(flags)
 
 	// Some flags are not available during upgrade, etc.
-	cmd.PersistentFlags().AddFlagSet(options.installOnlyFlagSet())
+	cmd.PersistentFlags().AddFlagSet(installOnlyFlags)
 
 	return cmd
 }
 
-func (options *installOptions) validateAndBuild(flags *pflag.FlagSet) (*installValues, *pb.All, error) {
+func (options *installOptions) validateAndBuild(stage string, flags *pflag.FlagSet) (*installValues, *pb.All, error) {
 	if err := options.validate(); err != nil {
 		return nil, nil, err
 	}
@@ -257,6 +280,7 @@ func (options *installOptions) validateAndBuild(flags *pflag.FlagSet) (*installV
 		return nil, nil, err
 	}
 	values.Identity = identityValues
+	values.stage = stage
 
 	return values, configs, nil
 }
@@ -283,10 +307,6 @@ func (options *installOptions) recordableFlagSet() *pflag.FlagSet {
 		"Log level for the controller and web components",
 	)
 	flags.BoolVar(
-		&options.proxyAutoInject, "proxy-auto-inject", options.proxyAutoInject,
-		"Enable proxy sidecar auto-injection via a webhook (default false)",
-	)
-	flags.BoolVar(
 		&options.highAvailability, "ha", options.highAvailability,
 		"Experimental: Enable HA deployment config for the control plane (default false)",
 	)
@@ -306,6 +326,9 @@ func (options *installOptions) recordableFlagSet() *pflag.FlagSet {
 		&options.identityOptions.clockSkewAllowance, "identity-clock-skew-allowance", options.identityOptions.clockSkewAllowance,
 		"The amount of time to allow for clock skew within a Linkerd cluster",
 	)
+
+	flags.StringVarP(&options.controlPlaneVersion, "control-plane-version", "", options.controlPlaneVersion, "(Development) Tag to be used for the control plane component images")
+	flags.MarkHidden("control-plane-version")
 
 	return flags
 }
@@ -336,6 +359,10 @@ func (options *installOptions) installOnlyFlagSet() *pflag.FlagSet {
 		&options.ignoreCluster, "ignore-cluster", options.ignoreCluster,
 		"Ignore the current Kubernetes cluster when checking for existing cluster configuration (default false)",
 	)
+	flags.BoolVar(
+		&options.skipChecks, "skip-checks", options.skipChecks,
+		`Skip checks for namespace existence, applicable for "linkerd install control-plane"`,
+	)
 
 	return flags
 }
@@ -348,7 +375,7 @@ func (options *installOptions) recordFlags(flags *pflag.FlagSet) {
 	flags.VisitAll(func(f *pflag.Flag) {
 		if f.Changed {
 			switch f.Name {
-			case "ignore-cluster", "linkerd-version":
+			case "ignore-cluster", "control-plane-version", "proxy-version":
 				// These flags don't make sense to record.
 			default:
 				options.recordedFlags = append(options.recordedFlags, &pb.Install_Flag{
@@ -361,6 +388,10 @@ func (options *installOptions) recordFlags(flags *pflag.FlagSet) {
 }
 
 func (options *installOptions) validate() error {
+	if options.controlPlaneVersion != "" && !alphaNumDashDot.MatchString(options.controlPlaneVersion) {
+		return fmt.Errorf("%s is not a valid version", options.controlPlaneVersion)
+	}
+
 	if options.identityOptions == nil {
 		// Programmer error: identityOptions may be empty, but it must be set by the constructor.
 		panic("missing identity options")
@@ -404,9 +435,9 @@ func (options *installOptions) buildValuesWithoutIdentity(configs *pb.All) (*ins
 
 	values := &installValues{
 		// Container images:
-		ControllerImage: fmt.Sprintf("%s/controller:%s", options.dockerRegistry, options.linkerdVersion),
-		WebImage:        fmt.Sprintf("%s/web:%s", options.dockerRegistry, options.linkerdVersion),
-		GrafanaImage:    fmt.Sprintf("%s/grafana:%s", options.dockerRegistry, options.linkerdVersion),
+		ControllerImage: fmt.Sprintf("%s/controller:%s", options.dockerRegistry, configs.GetGlobal().GetVersion()),
+		WebImage:        fmt.Sprintf("%s/web:%s", options.dockerRegistry, configs.GetGlobal().GetVersion()),
+		GrafanaImage:    fmt.Sprintf("%s/grafana:%s", options.dockerRegistry, configs.GetGlobal().GetVersion()),
 		PrometheusImage: prometheusImage,
 		ImagePullPolicy: options.imagePullPolicy,
 
@@ -419,15 +450,14 @@ func (options *installOptions) buildValuesWithoutIdentity(configs *pb.All) (*ins
 		ProxyInjectDisabled:      k8s.ProxyInjectDisabled,
 
 		// Controller configuration:
-		Namespace:              controlPlaneNamespace,
-		UUID:                   configs.GetInstall().GetUuid(),
-		ControllerReplicas:     options.controllerReplicas,
-		ControllerLogLevel:     options.controllerLogLevel,
-		ControllerUID:          options.controllerUID,
-		EnableH2Upgrade:        !options.disableH2Upgrade,
-		NoInitContainer:        options.noInitContainer,
-		ProxyAutoInjectEnabled: options.proxyAutoInject,
-		PrometheusLogLevel:     toPromLogLevel(options.controllerLogLevel),
+		Namespace:          controlPlaneNamespace,
+		UUID:               configs.GetInstall().GetUuid(),
+		ControllerReplicas: options.controllerReplicas,
+		ControllerLogLevel: options.controllerLogLevel,
+		ControllerUID:      options.controllerUID,
+		EnableH2Upgrade:    !options.disableH2Upgrade,
+		NoInitContainer:    options.noInitContainer,
+		PrometheusLogLevel: toPromLogLevel(options.controllerLogLevel),
 
 		Configs: configJSONs{
 			Global:  globalJSON,
@@ -494,17 +524,32 @@ func (values *installValues) render(w io.Writer, configs *pb.All) error {
 
 	files := []*chartutil.BufferedFile{
 		{Name: chartutil.ChartfileName},
-		{Name: nsTemplateName},
-		{Name: configTemplateName},
-		{Name: resourcesTemplateName},
-		{Name: identityTemplateName},
-		{Name: controllerTemplateName},
-		{Name: serviceprofileTemplateName},
-		{Name: webTemplateName},
-		{Name: prometheusTemplateName},
-		{Name: grafanaTemplateName},
-		{Name: proxyInjectorTemplateName},
-		{Name: spValidatorTemplateName},
+	}
+
+	if values.stage == "" || values.stage == configStage {
+		files = append(files, []*chartutil.BufferedFile{
+			{Name: "templates/namespace.yaml"},
+			{Name: "templates/identity-rbac.yaml"},
+			{Name: "templates/controller-rbac.yaml"},
+			{Name: "templates/serviceprofile-crd.yaml"},
+			{Name: "templates/prometheus-rbac.yaml"},
+			{Name: "templates/proxy_injector-rbac.yaml"},
+			{Name: "templates/sp_validator-rbac.yaml"},
+		}...)
+	}
+
+	if values.stage == "" || values.stage == controlPlaneStage {
+		files = append(files, []*chartutil.BufferedFile{
+			{Name: "templates/_resources.yaml"},
+			{Name: "templates/config.yaml"},
+			{Name: "templates/identity.yaml"},
+			{Name: "templates/controller.yaml"},
+			{Name: "templates/web.yaml"},
+			{Name: "templates/prometheus.yaml"},
+			{Name: "templates/grafana.yaml"},
+			{Name: "templates/proxy_injector.yaml"},
+			{Name: "templates/sp_validator.yaml"},
+		}...)
 	}
 
 	// Read templates into bytes
@@ -553,7 +598,8 @@ func (values *installValues) render(w io.Writer, configs *pb.All) error {
 	configs.Proxy.IgnoreOutboundPorts = append(configs.Proxy.IgnoreOutboundPorts, &pb.Port{Port: 443})
 
 	return processYAML(&buf, w, ioutil.Discard, resourceTransformerInject{
-		configs: configs,
+		injectProxy: true,
+		configs:     configs,
 		proxyOutboundCapacity: map[string]uint{
 			values.PrometheusImage: prometheusProxyOutboundCapacity,
 		},
@@ -582,17 +628,11 @@ func (options *installOptions) configs(identity *pb.IdentityContext) *pb.All {
 }
 
 func (options *installOptions) globalConfig(identity *pb.IdentityContext) *pb.Global {
-	var autoInjectContext *pb.AutoInjectContext
-	if options.proxyAutoInject {
-		autoInjectContext = &pb.AutoInjectContext{}
-	}
-
 	return &pb.Global{
-		LinkerdNamespace:  controlPlaneNamespace,
-		AutoInjectContext: autoInjectContext,
-		CniEnabled:        options.noInitContainer,
-		Version:           options.linkerdVersion,
-		IdentityContext:   identity,
+		LinkerdNamespace: controlPlaneNamespace,
+		CniEnabled:       options.noInitContainer,
+		Version:          options.controlPlaneVersion,
+		IdentityContext:  identity,
 	}
 }
 
@@ -654,6 +694,7 @@ func (options *installOptions) proxyConfig() *pb.Proxy {
 			Level: options.proxyLogLevel,
 		},
 		DisableExternalProfiles: !options.enableExternalProfiles,
+		ProxyVersion:            options.proxyVersion,
 	}
 }
 
@@ -691,6 +732,34 @@ func exitIfClusterExists() {
 
 	fmt.Fprintln(os.Stderr, "Linkerd has already been installed on your cluster in the linkerd namespace. Please run upgrade if you'd like to update this installation. Otherwise, use the --ignore-cluster flag.")
 	os.Exit(1)
+}
+
+// exitIfNamespaceDoesNotExist checks the kubernetes API to determine if the
+// control-plane namespace exists, and returns an error if it does not.
+//
+// This is useful when running `linkerd install control-plane`, where the
+// namespace must exist, but `linkerd-config` should not.
+func exitIfNamespaceDoesNotExist() {
+	hc := newHealthChecker(
+		[]healthcheck.CategoryID{healthcheck.KubernetesAPIChecks},
+		time.Time{},
+	)
+
+	success := hc.RunChecks(exitOnError)
+	if !success {
+		fmt.Fprintln(os.Stderr, "Failed to connect to Kubernetes. If this expected, use the --skip-checks flag.")
+		os.Exit(1)
+	}
+
+	err := hc.CheckNamespace(context.Background(), controlPlaneNamespace, true)
+	if err != nil {
+		fmt.Fprintf(os.Stderr,
+			"Failed to find required control-plane namespace: %s. Run \"linkerd install config -l %s | kubectl apply -f -\" to create it (this requires cluster administration permissions).\nSee https://linkerd.io/2/getting-started/ for more information. Or use \"--skip-checks\" to proceed anyway.\n",
+			controlPlaneNamespace, controlPlaneNamespace,
+		)
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		os.Exit(1)
+	}
 }
 
 func (idopts *installIdentityOptions) validate() error {
@@ -834,4 +903,34 @@ func (idvals *installIdentityValues) toIdentityContext() *pb.IdentityContext {
 		IssuanceLifetime:   ptypes.DurationProto(il),
 		ClockSkewAllowance: ptypes.DurationProto(csa),
 	}
+}
+
+func validateArgs(args []string, flags *pflag.FlagSet, installOnlyFlags *pflag.FlagSet) (string, error) {
+	if len(args) > 1 {
+		return "", fmt.Errorf("only zero or one argument permitted, received: %s", args)
+	} else if len(args) == 0 {
+		return "", nil
+	}
+
+	stage := args[0]
+
+	// only a few flags are available for config stage
+	if stage == configStage {
+		combinedFlags := pflag.NewFlagSet("combined-flags", pflag.ExitOnError)
+		combinedFlags.AddFlagSet(flags)
+		combinedFlags.AddFlagSet(installOnlyFlags)
+
+		invalidFlags := make([]string, 0)
+		combinedFlags.VisitAll(func(f *pflag.Flag) {
+			if f.Changed {
+				invalidFlags = append(invalidFlags, f.Name)
+			}
+		})
+		if len(invalidFlags) > 0 {
+			err := fmt.Errorf("flags not available for config stage: --%s", strings.Join(invalidFlags, ", --"))
+			return "", err
+		}
+	}
+
+	return stage, nil
 }

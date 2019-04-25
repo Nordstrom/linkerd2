@@ -2,7 +2,7 @@
   {
     "op": "add",
     "path": "/metadata/annotations/linkerd.io~1proxy-version",
-    "value": ""
+    "value": "dev-undefined"
   },
   {
     "op": "add",
@@ -29,7 +29,7 @@
     "path": "/spec/initContainers/-",
     "value": {
       "name": "linkerd-init",
-      "image": "gcr.io/linkerd-io/proxy-init:",
+      "image": "gcr.io/linkerd-io/proxy-init:dev-undefined",
       "args": [
         "--incoming-proxy-port",
         "4143",
@@ -60,7 +60,7 @@
     "path": "/spec/containers/-",
     "value": {
       "name": "linkerd-proxy",
-      "image": "gcr.io/linkerd-io/proxy:",
+      "image": "gcr.io/linkerd-io/proxy:dev-undefined",
       "ports": [
         {
           "name": "linkerd-proxy",

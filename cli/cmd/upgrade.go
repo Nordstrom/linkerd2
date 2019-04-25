@@ -138,8 +138,8 @@ func (options *upgradeOptions) validateAndBuild(k kubernetes.Interface, flags *p
 
 	// Update the configs from the synthesized options.
 	options.overrideConfigs(configs, map[string]string{})
-	if options.proxyAutoInject {
-		configs.GetGlobal().AutoInjectContext = &pb.AutoInjectContext{}
+	if options.controlPlaneVersion != "" {
+		configs.GetGlobal().Version = options.controlPlaneVersion
 	}
 	configs.GetInstall().Flags = options.recordedFlags
 

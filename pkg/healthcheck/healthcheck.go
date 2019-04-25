@@ -17,6 +17,7 @@ import (
 	"github.com/linkerd/linkerd2/pkg/version"
 	log "github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
+	v1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sVersion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
@@ -198,6 +199,10 @@ func NewHealthChecker(categoryIDs []CategoryID, options *Options) *HealthChecker
 // category. This method is attached to the HealthChecker struct because the
 // checkers directly reference other members of the struct, such as kubeAPI,
 // controlPlanePods, etc.
+//
+// Ordering is important because checks rely on specific `HealthChecker` members
+// getting populated by earlier checks, such as kubeAPI, controlPlanePods, etc.
+//
 // Note that all checks should include a `hintAnchor` with a corresponding section
 // in the linkerd check faq:
 // https://linkerd.io/checks/#
@@ -268,7 +273,7 @@ func (hc *HealthChecker) allCategories() []category {
 					description: "control plane namespace does not already exist",
 					hintAnchor:  "pre-ns",
 					check: func(ctx context.Context) error {
-						return hc.checkNamespace(ctx, hc.ControlPlaneNamespace, false)
+						return hc.CheckNamespace(ctx, hc.ControlPlaneNamespace, false)
 					},
 				},
 				{
@@ -349,7 +354,34 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "l5d-existence-ns",
 					fatal:       true,
 					check: func(ctx context.Context) error {
-						return hc.checkNamespace(ctx, hc.ControlPlaneNamespace, true)
+						return hc.CheckNamespace(ctx, hc.ControlPlaneNamespace, true)
+					},
+				},
+				{
+					description: "control plane components ready",
+					hintAnchor:  "l5d-existence-psp",
+					fatal:       true,
+					check: func(ctx context.Context) error {
+						var err error
+						var controlPlaneReplicaSet []v1beta1.ReplicaSet
+						controlPlaneReplicaSet, err = hc.kubeAPI.GetReplicaSets(ctx, hc.httpClient, hc.ControlPlaneNamespace)
+						if err != nil {
+							return err
+						}
+						return checkControlPlaneReplicaSets(controlPlaneReplicaSet)
+					},
+				},
+				{
+					description: "no unschedulable pods",
+					hintAnchor:  "l5d-existence-unschedulable-pods",
+					fatal:       true,
+					check: func(ctx context.Context) error {
+						var err error
+						hc.controlPlanePods, err = hc.kubeAPI.GetPodsByNamespace(ctx, hc.httpClient, hc.ControlPlaneNamespace)
+						if err != nil {
+							return err
+						}
+						return checkUnschedulablePods(hc.controlPlanePods)
 					},
 				},
 				{
@@ -358,11 +390,6 @@ func (hc *HealthChecker) allCategories() []category {
 					retryDeadline: hc.RetryDeadline,
 					fatal:         true,
 					check: func(ctx context.Context) error {
-						var err error
-						hc.controlPlanePods, err = hc.kubeAPI.GetPodsByNamespace(ctx, hc.httpClient, hc.ControlPlaneNamespace)
-						if err != nil {
-							return err
-						}
 						return checkControllerRunning(hc.controlPlanePods)
 					},
 				},
@@ -500,7 +527,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "l5d-data-plane-exists",
 					fatal:       true,
 					check: func(ctx context.Context) error {
-						return hc.checkNamespace(ctx, hc.DataPlaneNamespace, true)
+						return hc.CheckNamespace(ctx, hc.DataPlaneNamespace, true)
 					},
 				},
 				{
@@ -706,7 +733,9 @@ func (hc *HealthChecker) PublicAPIClient() public.APIClient {
 	return hc.apiClient
 }
 
-func (hc *HealthChecker) checkNamespace(ctx context.Context, namespace string, shouldExist bool) error {
+// CheckNamespace checks whether the given namespace exists, and returns an
+// error if it does not match `shouldExist`.
+func (hc *HealthChecker) CheckNamespace(ctx context.Context, namespace string, shouldExist bool) error {
 	exists, err := hc.kubeAPI.NamespaceExists(ctx, hc.httpClient, namespace)
 	if err != nil {
 		return err
@@ -925,6 +954,40 @@ func validateDataPlanePodReporting(pods []*pb.Pod) error {
 
 	if errMsg != "" {
 		return fmt.Errorf(errMsg)
+	}
+
+	return nil
+}
+
+func checkUnschedulablePods(pods []corev1.Pod) error {
+	var errors []string
+	for _, pod := range pods {
+		for _, condition := range pod.Status.Conditions {
+			if condition.Reason == corev1.PodReasonUnschedulable {
+				errors = append(errors, fmt.Sprintf("%s: %s", pod.Name, condition.Message))
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("%s", strings.Join(errors, "\n    "))
+	}
+
+	return nil
+}
+
+func checkControlPlaneReplicaSets(rst []v1beta1.ReplicaSet) error {
+	var errors []string
+	for _, rs := range rst {
+		for _, r := range rs.Status.Conditions {
+			if r.Type == v1beta1.ReplicaSetReplicaFailure && r.Status == corev1.ConditionTrue {
+				errors = append(errors, fmt.Sprintf("%s: %s", r.Reason, r.Message))
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("%s", strings.Join(errors, "\n   "))
 	}
 
 	return nil

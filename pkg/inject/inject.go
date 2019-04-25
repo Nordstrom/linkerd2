@@ -9,6 +9,7 @@ import (
 
 	"github.com/linkerd/linkerd2/controller/gen/config"
 	"github.com/linkerd/linkerd2/pkg/k8s"
+	"github.com/linkerd/linkerd2/pkg/version"
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -104,6 +105,7 @@ type ResourceConfig struct {
 	proxyOutboundCapacity  map[string]uint
 	ownerRetriever         OwnerRetrieverFunc
 	origin                 Origin
+	debugSidecar           *v1.Container
 
 	workload struct {
 		obj      runtime.Object
@@ -134,6 +136,17 @@ func NewResourceConfig(configs *config.All, origin Origin) *ResourceConfig {
 	config.pod.labels = map[string]string{k8s.ControllerNSLabel: configs.GetGlobal().GetLinkerdNamespace()}
 	config.pod.annotations = map[string]string{}
 	return config
+}
+
+// WithDebugSidecar enriches ResourceConfig with a debug sidecar for a resource
+func (conf *ResourceConfig) WithDebugSidecar() *ResourceConfig {
+	conf.debugSidecar = &v1.Container{
+		Name:                     k8s.DebugSidecarName,
+		ImagePullPolicy:          conf.proxyImagePullPolicy(),
+		Image:                    fmt.Sprintf("%s:%s", k8s.DebugSidecarImage, conf.configs.GetGlobal().GetVersion()),
+		TerminationMessagePolicy: v1.TerminationMessageFallbackToLogsOnError,
+	}
+	return conf
 }
 
 // WithKind enriches ResourceConfig with the workload kind
@@ -171,6 +184,11 @@ func (conf *ResourceConfig) AppendPodAnnotations(annotations map[string]string) 
 	}
 }
 
+// AppendPodAnnotation appends the given single annotation to the pod spec in conf
+func (conf *ResourceConfig) AppendPodAnnotation(k, v string) {
+	conf.pod.annotations[k] = v
+}
+
 // YamlMarshalObj returns the yaml for the workload in conf
 func (conf *ResourceConfig) YamlMarshalObj() ([]byte, error) {
 	return yaml.Marshal(conf.workload.obj)
@@ -186,12 +204,16 @@ func (conf *ResourceConfig) ParseMetaAndYAML(bytes []byte) (*Report, error) {
 	return newReport(conf), nil
 }
 
-// GetPatch returns the JSON patch containing the proxy and init containers specs, if any
-func (conf *ResourceConfig) GetPatch(bytes []byte) (*Patch, error) {
+// GetPatch returns the JSON patch containing the proxy and init containers specs, if any.
+// If injectProxy is false, only the config.linkerd.io annotations are set.
+func (conf *ResourceConfig) GetPatch(bytes []byte, injectProxy bool) (*Patch, error) {
 	patch := NewPatch(conf.workload.metaType.Kind)
 	if conf.pod.spec != nil {
-		conf.injectObjectMeta(patch)
-		conf.injectPodSpec(patch)
+		conf.injectPodAnnotations(patch)
+		if injectProxy {
+			conf.injectObjectMeta(patch)
+			conf.injectPodSpec(patch)
+		}
 	}
 
 	return patch, nil
@@ -396,6 +418,10 @@ func (conf *ResourceConfig) injectPodSpec(patch *Patch) {
 		conf.injectProxyInit(patch, saVolumeMount)
 	}
 
+	if conf.debugSidecar != nil {
+		patch.addContainer(conf.debugSidecar)
+	}
+
 	proxyUID := conf.proxyUID()
 	sidecar := v1.Container{
 		Name:                     k8s.ProxyContainerName,
@@ -487,7 +513,7 @@ func (conf *ResourceConfig) injectPodSpec(patch *Patch) {
 		sidecar.VolumeMounts = []v1.VolumeMount{*saVolumeMount}
 	}
 
-	idctx := conf.configs.GetGlobal().GetIdentityContext()
+	idctx := conf.identityContext()
 	if idctx == nil {
 		sidecar.Env = append(sidecar.Env, v1.EnvVar{
 			Name:  envIdentityDisabled,
@@ -602,12 +628,9 @@ func (conf *ResourceConfig) serviceAccountVolumeMount() *v1.VolumeMount {
 // Given a ObjectMeta, update ObjectMeta in place with the new labels and
 // annotations.
 func (conf *ResourceConfig) injectObjectMeta(patch *Patch) {
-	if len(conf.pod.meta.Annotations) == 0 {
-		patch.addPodAnnotationsRoot()
-	}
-	patch.addPodAnnotation(k8s.ProxyVersionAnnotation, conf.configs.GetGlobal().GetVersion())
+	patch.addPodAnnotation(k8s.ProxyVersionAnnotation, conf.proxyVersion())
 
-	if conf.configs.GetGlobal().GetIdentityContext() != nil {
+	if conf.identityContext() != nil {
 		patch.addPodAnnotation(k8s.IdentityModeAnnotation, k8s.IdentityModeDefault)
 	} else {
 		patch.addPodAnnotation(k8s.IdentityModeAnnotation, k8s.IdentityModeDisabled)
@@ -620,6 +643,12 @@ func (conf *ResourceConfig) injectObjectMeta(patch *Patch) {
 		for _, k := range sortedKeys(conf.pod.labels) {
 			patch.addPodLabel(k, conf.pod.labels[k])
 		}
+	}
+}
+
+func (conf *ResourceConfig) injectPodAnnotations(patch *Patch) {
+	if len(conf.pod.meta.Annotations) == 0 {
+		patch.addPodAnnotationsRoot()
 	}
 
 	for _, k := range sortedKeys(conf.pod.annotations) {
@@ -640,7 +669,7 @@ func (conf *ResourceConfig) taggedProxyImage() string {
 }
 
 func (conf *ResourceConfig) taggedProxyInitImage() string {
-	return fmt.Sprintf("%s:%s", conf.proxyInitImage(), conf.proxyVersion())
+	return fmt.Sprintf("%s:%s", conf.proxyInitImage(), conf.proxyInitVersion())
 }
 
 func (conf *ResourceConfig) proxyImage() string {
@@ -661,7 +690,20 @@ func (conf *ResourceConfig) proxyVersion() string {
 	if override := conf.getOverride(k8s.ProxyVersionOverrideAnnotation); override != "" {
 		return override
 	}
-	return conf.configs.GetGlobal().GetVersion()
+	if proxyVersion := conf.configs.GetProxy().GetProxyVersion(); proxyVersion != "" {
+		return proxyVersion
+	}
+	if controlPlaneVersion := conf.configs.GetGlobal().GetVersion(); controlPlaneVersion != "" {
+		return controlPlaneVersion
+	}
+	return version.Version
+}
+
+func (conf *ResourceConfig) proxyInitVersion() string {
+	if version := conf.configs.GetGlobal().GetVersion(); version != "" {
+		return version
+	}
+	return version.Version
 }
 
 func (conf *ResourceConfig) proxyControlPort() int32 {
@@ -713,6 +755,17 @@ func (conf *ResourceConfig) proxyLogLevel() string {
 	}
 
 	return conf.configs.GetProxy().GetLogLevel().GetLevel()
+}
+
+func (conf *ResourceConfig) identityContext() *config.IdentityContext {
+	if override := conf.getOverride(k8s.ProxyDisableIdentityAnnotation); override != "" {
+		value, err := strconv.ParseBool(override)
+		if err == nil && value {
+			return nil
+		}
+	}
+
+	return conf.configs.GetGlobal().GetIdentityContext()
 }
 
 func (conf *ResourceConfig) proxyResourceRequirements() v1.ResourceRequirements {
