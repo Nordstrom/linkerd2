@@ -46,22 +46,37 @@ type (
 		// ValidityPeriod describes how long certificates issued by this CA are expected to be valid.
 		// This is in nanoseconds. We will convert nanoseconds in to days since ACMPCA only supports days at the moment.
 		ValidityPeriod time.Duration
+
+		retryer ACMPCARetryer
 	}
 )
+
+func EasyNewCADelegate() (*ACMPCADelegate, error) {
+	validityPeriod := 30 * (time.Hour * 24)
+	retryer := NewACMPCARetry(3)
+	params := CADelegateParams{
+		Region:         "us-west-2",
+		CaARN:          "arn:aws:acm-pca:us-west-2:536616252769:certificate-authority/6ee645f6-540f-47b1-a9c3-b5d05c12790c",
+		ValidityPeriod: validityPeriod,
+		retryer:        retryer,
+	}
+
+	return NewCADelegate(params)
+}
 
 // NewCADelegate is a factory method that returns a new ACMPCADelegate.
 func NewCADelegate(params CADelegateParams) (*ACMPCADelegate, error) {
 	session, sessionErr := session.NewSession(&aws.Config{
-		Region: aws.String(params.Region),
+		Retryer: params.retryer,
+		Region:  aws.String(params.Region),
 	})
-
-	config := aws.NewConfig()
 
 	if sessionErr != nil {
 		log.Error("Unable to create aws session for AWS ACMPCA\n")
 		return nil, sessionErr
 	}
 
+	config := aws.NewConfig()
 	acmClient := acmpca.New(session, config)
 
 	return &ACMPCADelegate{
