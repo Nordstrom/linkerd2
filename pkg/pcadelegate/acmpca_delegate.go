@@ -51,19 +51,6 @@ type (
 	}
 )
 
-func EasyNewCADelegate() (*ACMPCADelegate, error) {
-	validityPeriod := 30 * (time.Hour * 24)
-	retryer := NewACMPCARetry(3)
-	params := CADelegateParams{
-		Region:         "us-west-2",
-		CaARN:          "arn:aws:acm-pca:us-west-2:536616252769:certificate-authority/6ee645f6-540f-47b1-a9c3-b5d05c12790c",
-		ValidityPeriod: validityPeriod,
-		retryer:        retryer,
-	}
-
-	return NewCADelegate(params)
-}
-
 // NewCADelegate is a factory method that returns a new ACMPCADelegate.
 func NewCADelegate(params CADelegateParams) (*ACMPCADelegate, error) {
 	session, sessionErr := session.NewSession(&aws.Config{
