@@ -107,6 +107,7 @@ func main() {
 			Region:         region,
 			CaARN:          arn,
 			ValidityPeriod: issuanceLifetime,
+			Retryer: pcadelegate.NewACMPCARetry(5)
 		}
 		ca, err = pcadelegate.NewCADelegate(params)
 		if err != nil {

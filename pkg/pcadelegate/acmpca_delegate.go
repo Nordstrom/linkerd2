@@ -47,14 +47,14 @@ type (
 		// This is in nanoseconds. We will convert nanoseconds in to days since ACMPCA only supports days at the moment.
 		ValidityPeriod time.Duration
 
-		retryer ACMPCARetryer
+		Retryer ACMPCARetryer
 	}
 )
 
 // NewCADelegate is a factory method that returns a new ACMPCADelegate.
 func NewCADelegate(params CADelegateParams) (*ACMPCADelegate, error) {
 	session, sessionErr := session.NewSession(&aws.Config{
-		Retryer: params.retryer,
+		Retryer: params.Retryer,
 		Region:  aws.String(params.Region),
 	})
 
