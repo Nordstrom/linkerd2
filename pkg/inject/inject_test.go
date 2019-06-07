@@ -6,6 +6,7 @@ import (
 
 	"github.com/linkerd/linkerd2/controller/gen/config"
 	"github.com/linkerd/linkerd2/pkg/k8s"
+	"github.com/linkerd/linkerd2/pkg/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8sResource "k8s.io/apimachinery/pkg/api/resource"
@@ -161,7 +162,7 @@ func TestConfigAccessors(t *testing.T) {
 				destinationProfileSuffixes: "svc.cluster.local.",
 				initImage:                  "gcr.io/linkerd-io/proxy-init",
 				initImagePullPolicy:        corev1.PullPolicy("Always"),
-				initVersion:                controlPlaneVersion,
+				initVersion:                version.ProxyInitVersion,
 				initArgs: []string{
 					"--incoming-proxy-port", "5000",
 					"--outgoing-proxy-port", "5002",
@@ -227,7 +228,7 @@ func TestConfigAccessors(t *testing.T) {
 				destinationProfileSuffixes: ".",
 				initImage:                  "gcr.io/linkerd-io/proxy-init",
 				initImagePullPolicy:        corev1.PullPolicy("IfNotPresent"),
-				initVersion:                controlPlaneVersion,
+				initVersion:                version.ProxyInitVersion,
 				initArgs: []string{
 					"--incoming-proxy-port", "6000",
 					"--outgoing-proxy-port", "6002",
@@ -461,4 +462,100 @@ func TestProxyInitResourceRequirments(t *testing.T) {
 			t.Errorf("Resource mismatch. Expected %+v. Actual %+v", expected, v)
 		}
 	}
+}
+
+func TestInjectPodSpec(t *testing.T) {
+	var (
+		configs = &config.All{}
+		conf    = NewResourceConfig(configs, OriginUnknown)
+	)
+	conf.pod.meta = &metav1.ObjectMeta{}
+	conf.pod.meta.Annotations = map[string]string{}
+	conf.pod.spec = &corev1.PodSpec{}
+
+	t.Run("debug container", func(t *testing.T) {
+		patch := NewPatch("Deployment")
+		conf.AppendPodAnnotation(k8s.ProxyEnableDebugAnnotation, "true")
+		conf.injectPodAnnotations(patch)
+		conf.injectPodSpec(patch)
+
+		passed := false
+		for _, actual := range patch.patchOps {
+			if actual.Op == "add" && actual.Path == "/spec/template/spec/containers/-" {
+				container, ok := actual.Value.(*corev1.Container)
+				if !ok {
+					t.Fatal("Unexpected type assertion error")
+				}
+
+				if container.Name == k8s.DebugSidecarName {
+					passed = true
+					break
+				}
+			}
+		}
+
+		if !passed {
+			t.Errorf("Expected debug container to be added to patch. Actual patch: %v", patch.patchOps)
+		}
+	})
+
+	t.Run("proxy and proxy-init security context", func(t *testing.T) {
+		// expect the proxy and proxy-init containers to share the same 'Add' and
+		// 'Drop' rules
+		testContainer := corev1.Container{
+			Name: "test-svc",
+			SecurityContext: &corev1.SecurityContext{
+				Capabilities: &corev1.Capabilities{
+					Add:  []corev1.Capability{"NET_ADMIN", "SYS_TIME"},
+					Drop: []corev1.Capability{"NET_RAW"},
+				},
+			},
+		}
+		conf.pod.spec = &corev1.PodSpec{
+			Containers: []corev1.Container{testContainer},
+		}
+		patch := NewPatch("Deployment")
+		conf.injectPodSpec(patch)
+
+		for _, actual := range patch.patchOps {
+			if actual.Op == "add" && actual.Path == "/spec/template/spec/containers/-" {
+				container, ok := actual.Value.(*corev1.Container)
+				if !ok {
+					t.Fatal("Unexpected type assertion error")
+				}
+
+				for _, sidecar := range []string{k8s.ProxyContainerName, k8s.InitContainerName} {
+					if container.Name == sidecar {
+						if sc := container.SecurityContext; sc != nil {
+							if *sc.AllowPrivilegeEscalation {
+								t.Errorf("Expected %s's 'allowPrivilegeEscalation' to be false", sidecar)
+							}
+
+							if !*sc.ReadOnlyRootFilesystem {
+								t.Errorf("Expected %s's 'readOnlyRootFilesystem' to be true", sidecar)
+							}
+
+							if *sc.RunAsUser != conf.proxyUID() {
+								t.Errorf("Expected %s's 'RunAsUser' to be %d", sidecar, conf.proxyUID())
+							}
+
+							if !reflect.DeepEqual(sc.Capabilities.Add, testContainer.SecurityContext.Capabilities.Add) {
+								t.Errorf("Mismatch 'Add Capabilities' rules. Expected: %v, Actual: %v",
+									sc.Capabilities.Add,
+									testContainer.SecurityContext.Capabilities.Add)
+							}
+
+							if !reflect.DeepEqual(sc.Capabilities.Drop, testContainer.SecurityContext.Capabilities.Drop) {
+								t.Errorf("Mismatch 'Drop Capabilities' rules. Expected: %v, Actual: %v ",
+									sc.Capabilities.Drop,
+									testContainer.SecurityContext.Capabilities.Drop)
+							}
+						} else {
+							t.Errorf("Expected %s security context to be non-empty", sidecar)
+						}
+					}
+				}
+			}
+		}
+	})
 }
