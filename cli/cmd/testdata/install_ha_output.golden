@@ -543,6 +543,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+            - NET_RAW
           privileged: false
           readOnlyRootFilesystem: true
           runAsNonRoot: false
@@ -834,6 +835,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+            - NET_RAW
           privileged: false
           readOnlyRootFilesystem: true
           runAsNonRoot: false
@@ -1046,6 +1048,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+            - NET_RAW
           privileged: false
           readOnlyRootFilesystem: true
           runAsNonRoot: false
@@ -1348,6 +1351,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+            - NET_RAW
           privileged: false
           readOnlyRootFilesystem: true
           runAsNonRoot: false
@@ -1613,6 +1617,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+            - NET_RAW
           privileged: false
           readOnlyRootFilesystem: true
           runAsNonRoot: false
@@ -1813,6 +1818,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+            - NET_RAW
           privileged: false
           readOnlyRootFilesystem: true
           runAsNonRoot: false
@@ -2037,6 +2043,7 @@ spec:
           capabilities:
             add:
             - NET_ADMIN
+            - NET_RAW
           privileged: false
           readOnlyRootFilesystem: true
           runAsNonRoot: false
