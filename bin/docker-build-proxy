@@ -13,17 +13,7 @@ rootdir="$( cd $bindir/.. && pwd )"
 . $bindir/_docker.sh
 . $bindir/_tag.sh
 
-dockerfile=$rootdir/Dockerfile-proxy
-
-validate_go_deps_tag $dockerfile
-
-(
-    $bindir/docker-build-base
-    $bindir/docker-build-go-deps
-) >/dev/null
-
 # Default to a pinned commit SHA of the proxy.
-PROXY_VERSION="${PROXY_VERSION:-790a86a}"
+PROXY_VERSION="${PROXY_VERSION:-5018026}"
 
-tag="$(head_root_tag)"
-docker_build proxy $tag $dockerfile --build-arg LINKERD_VERSION=$tag --build-arg PROXY_VERSION=$PROXY_VERSION
+docker_build proxy "$(head_root_tag)" $rootdir/Dockerfile-proxy --build-arg PROXY_VERSION=$PROXY_VERSION

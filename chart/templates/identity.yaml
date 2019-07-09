@@ -4,34 +4,24 @@
 ###
 ### Identity Controller Service
 ###
+{{- if .Identity.LinkerdIdentityIssuer}}
 ---
-kind: ServiceAccount
+kind: Secret
 apiVersion: v1
 metadata:
-  name: linkerd-identity
+  name: linkerd-identity-issuer
   namespace: {{.Namespace}}
----
-kind: ClusterRole
-apiVersion: rbac.authorization.k8s.io/v1beta1
-metadata:
-  name: linkerd-{{.Namespace}}-identity
-rules:
-- apiGroups: ["authentication.k8s.io"]
-  resources: ["tokenreviews"]
-  verbs: ["create"]
----
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1beta1
-metadata:
-  name: linkerd-{{.Namespace}}-identity
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: linkerd-{{.Namespace}}-identity
-subjects:
-- kind: ServiceAccount
-  name: linkerd-identity
-  namespace: {{.Namespace}}
+  labels:
+    {{.ControllerComponentLabel}}: identity
+  annotations:
+    {{.CreatedByAnnotation}}: {{.CliVersion}}
+    {{- if .Identity.LinkerdIdentityIssuer.CrtExpiryAnnotation}}
+    {{.Identity.LinkerdIdentityIssuer.CrtExpiryAnnotation}}: {{.Identity.LinkerdIdentityIssuer.CrtExpiry}}
+    {{- end}}
+data:
+  crt.pem: {{b64enc .Identity.LinkerdIdentityIssuer.CrtPEM}}
+  key.pem: {{b64enc .Identity.LinkerdIdentityIssuer.KeyPEM}}
+{{- end}}
 ---
 kind: Service
 apiVersion: v1
@@ -50,24 +40,6 @@ spec:
   - name: grpc
     port: 8080
     targetPort: 8080
-{{- if .Identity.Issuer}}
----
-kind: Secret
-apiVersion: v1
-metadata:
-  name: linkerd-identity-issuer
-  namespace: {{.Namespace}}
-  labels:
-    {{.ControllerComponentLabel}}: identity
-  annotations:
-    {{.CreatedByAnnotation}}: {{.CliVersion}}
-    {{- if .Identity.Issuer.CrtExpiryAnnotation}}
-    {{.Identity.Issuer.CrtExpiryAnnotation}}: {{.Identity.Issuer.CrtExpiry}}
-    {{- end}}
-data:
-  crt.pem: {{b64enc .Identity.Issuer.CrtPEM}}
-  key.pem: {{b64enc .Identity.Issuer.KeyPEM}}
-{{- end}}
 ---
 kind: Deployment
 apiVersion: extensions/v1beta1
@@ -103,8 +75,10 @@ spec:
         volumeMounts:
         - mountPath: /var/run/linkerd/config
           name: config
+        {{- if .Identity.LinkerdIdentityIssuer}}
         - mountPath: /var/run/linkerd/identity/issuer
           name: identity-issuer
+        {{- end}}
         livenessProbe:
           httpGet:
             path: /ping
@@ -124,8 +98,10 @@ spec:
       - name: config
         configMap:
           name: linkerd-config
+      {{- if .Identity.LinkerdIdentityIssuer}}
       - name: identity-issuer
         secret:
           secretName: linkerd-identity-issuer
+      {{- end}}
 {{end -}}
 {{end -}}

@@ -5,13 +5,24 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/linkerd/linkerd2/controller/gen/config"
 )
 
 func TestRender(t *testing.T) {
 	defaultOptions := testInstallOptions()
-	defaultValues, defaultConfig, err := defaultOptions.validateAndBuild(nil)
+	defaultValues, defaultConfig, err := defaultOptions.validateAndBuild("", nil)
+	if err != nil {
+		t.Fatalf("Unexpected error validating options: %v", err)
+	}
+
+	configValues, configConfig, err := defaultOptions.validateAndBuild(configStage, nil)
+	if err != nil {
+		t.Fatalf("Unexpected error validating options: %v", err)
+	}
+
+	controlPlaneValues, controlPlaneConfig, err := defaultOptions.validateAndBuild(controlPlaneStage, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error validating options: %v", err)
 	}
@@ -35,7 +46,6 @@ func TestRender(t *testing.T) {
 		ControllerComponentLabel: "ControllerComponentLabel",
 		CreatedByAnnotation:      "CreatedByAnnotation",
 		ProxyContainerName:       "ProxyContainerName",
-		ProxyAutoInjectEnabled:   true,
 		ProxyInjectAnnotation:    "ProxyInjectAnnotation",
 		ProxyInjectDisabled:      "ProxyInjectDisabled",
 		ControllerUID:            2103,
@@ -53,7 +63,7 @@ func TestRender(t *testing.T) {
 	haOptions := testInstallOptions()
 	haOptions.recordedFlags = []*config.Install_Flag{{Name: "ha", Value: "true"}}
 	haOptions.highAvailability = true
-	haValues, haConfig, _ := haOptions.validateAndBuild(nil)
+	haValues, haConfig, _ := haOptions.validateAndBuild("", nil)
 
 	haWithOverridesOptions := testInstallOptions()
 	haWithOverridesOptions.recordedFlags = []*config.Install_Flag{
@@ -66,21 +76,22 @@ func TestRender(t *testing.T) {
 	haWithOverridesOptions.controllerReplicas = 2
 	haWithOverridesOptions.proxyCPURequest = "400m"
 	haWithOverridesOptions.proxyMemoryRequest = "300Mi"
-	haWithOverridesValues, haWithOverridesConfig, _ := haWithOverridesOptions.validateAndBuild(nil)
+	haWithOverridesValues, haWithOverridesConfig, _ := haWithOverridesOptions.validateAndBuild("", nil)
 
 	noInitContainerOptions := testInstallOptions()
 	noInitContainerOptions.recordedFlags = []*config.Install_Flag{{Name: "linkerd-cni-enabled", Value: "true"}}
 	noInitContainerOptions.noInitContainer = true
-	noInitContainerValues, noInitContainerConfig, _ := noInitContainerOptions.validateAndBuild(nil)
+	noInitContainerValues, noInitContainerConfig, _ := noInitContainerOptions.validateAndBuild("", nil)
 
-	noInitContainerWithProxyAutoInjectOptions := testInstallOptions()
-	noInitContainerWithProxyAutoInjectOptions.recordedFlags = []*config.Install_Flag{
-		{Name: "linkerd-cni-enabled", Value: "true"},
-		{Name: "proxy-auto-inject", Value: "true"},
+	awsacmpcaOptions := testInstallOptions()
+	awsacmpcaOptions.identityOptions.caType = 1
+	awsacmpcaOptions.identityOptions.region = "us-west-2"
+	awsacmpcaOptions.identityOptions.arn = "arn:aws:acm-pca:us-west-2:1234:certificate-authority/123-123-123"
+	awsacmpcaOptions.identityOptions.issuanceLifetime = 3 * 24 * time.Hour
+	awsacmpcaValues, awsacmpcaConfig, err := awsacmpcaOptions.validateAndBuild("", nil)
+	if err != nil {
+		t.Fatalf("Unexpected error validating options: %v", err)
 	}
-	noInitContainerWithProxyAutoInjectOptions.noInitContainer = true
-	noInitContainerWithProxyAutoInjectOptions.proxyAutoInject = true
-	noInitContainerWithProxyAutoInjectValues, noInitContainerWithProxyAutoInjectConfig, _ := noInitContainerWithProxyAutoInjectOptions.validateAndBuild(nil)
 
 	testCases := []struct {
 		values         *installValues
@@ -88,11 +99,13 @@ func TestRender(t *testing.T) {
 		goldenFileName string
 	}{
 		{defaultValues, defaultConfig, "install_default.golden"},
+		{configValues, configConfig, "install_config.golden"},
+		{controlPlaneValues, controlPlaneConfig, "install_control-plane.golden"},
 		{metaValues, metaConfig, "install_output.golden"},
 		{haValues, haConfig, "install_ha_output.golden"},
 		{haWithOverridesValues, haWithOverridesConfig, "install_ha_with_overrides_output.golden"},
 		{noInitContainerValues, noInitContainerConfig, "install_no_init_container.golden"},
-		{noInitContainerWithProxyAutoInjectValues, noInitContainerWithProxyAutoInjectConfig, "install_no_init_container_auto_inject.golden"},
+		{awsacmpcaValues, awsacmpcaConfig, "install_control-plane-awsacmpca.golden"},
 	}
 
 	for i, tc := range testCases {
@@ -112,6 +125,8 @@ func TestRender(t *testing.T) {
 func testInstallOptions() *installOptions {
 	o := newInstallOptionsWithDefaults()
 	o.ignoreCluster = true
+	o.proxyVersion = "install-proxy-version"
+	o.controlPlaneVersion = "install-control-plane-version"
 	o.generateUUID = func() string {
 		return "deaab91a-f4ab-448a-b7d1-c832a2fa0a60"
 	}
