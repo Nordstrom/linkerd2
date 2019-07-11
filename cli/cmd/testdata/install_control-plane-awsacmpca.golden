@@ -632,30 +632,15 @@ metadata:
     linkerd.io/created-by: linkerd/cli dev-undefined
 data:
   global: |
-    {"linkerdNamespace":"linkerd","cniEnabled":false,"version":"UPGRADE-CONTROL-PLANE-VERSION","identityContext":{"trustDomain":"cluster.local","trustAnchorsPem":"-----BEGIN CERTIFICATE-----\nMIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0\neS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz\nMjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j\nYWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg\nEMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw\nQDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC\nMA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW\nYmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj\n+U9K4WlbzA==\n-----END CERTIFICATE-----\n","issuanceLifetime":"86400s","clockSkewAllowance":"20s","caType":0,"awsacmpca":null},"autoInjectContext":null,"omitWebhookSideEffects":false}
+    {"linkerdNamespace":"linkerd","cniEnabled":false,"version":"install-control-plane-version","identityContext":{"trustDomain":"cluster.local","trustAnchorsPem":"-----BEGIN CERTIFICATE-----\nMIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy\nLmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE\nAxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0\nxtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364\n6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF\nBQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE\nAiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv\nOLO4Zsk1XrGZHGsmyiEyvYF9lpY=\n-----END CERTIFICATE-----\n","issuanceLifetime":"259200s","clockSkewAllowance":null,"caType":1,"awsacmpca":{"caArn":"arn:aws:acm-pca:us-west-2:1234:certificate-authority/123-123-123","caRegion":"us-west-2"}},"autoInjectContext":null,"omitWebhookSideEffects":false}
   proxy: |
-    {"proxyImage":{"imageName":"gcr.io/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"gcr.io/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"","requestMemory":"","limitCpu":"","limitMemory":""},"proxyUid":"2102","logLevel":{"level":"warn,linkerd2_proxy=info"},"disableExternalProfiles":true,"proxyVersion":"UPGRADE-PROXY-VERSION","proxyInitImageVersion":"v1.0.0"}
+    {"proxyImage":{"imageName":"gcr.io/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"gcr.io/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"","requestMemory":"","limitCpu":"","limitMemory":""},"proxyUid":"2102","logLevel":{"level":"warn,linkerd2_proxy=info"},"disableExternalProfiles":true,"proxyVersion":"install-proxy-version","proxyInitImageVersion":"v1.0.0"}
   install: |
-    {"uuid":"57af298c-58b0-43fc-8d88-3c338789bfbc","cliVersion":"dev-undefined","flags":[]}
+    {"uuid":"deaab91a-f4ab-448a-b7d1-c832a2fa0a60","cliVersion":"dev-undefined","flags":[]}
 ---
 ###
 ### Identity Controller Service
 ###
----
-kind: Secret
-apiVersion: v1
-metadata:
-  name: linkerd-identity-issuer
-  namespace: linkerd
-  labels:
-    linkerd.io/control-plane-component: identity
-    linkerd.io/control-plane-ns: linkerd
-  annotations:
-    linkerd.io/created-by: linkerd/cli dev-undefined
-    linkerd.io/identity-issuer-expiry: 2020-04-03T23:53:57Z
-data:
-  crt.pem: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJnekNDQVNtZ0F3SUJBZ0lCQVRBS0JnZ3Foa2pPUFFRREFqQXBNU2N3SlFZRFZRUURFeDVwWkdWdWRHbDAKZVM1c2FXNXJaWEprTG1Oc2RYTjBaWEl1Ykc5allXd3dIaGNOTVRrd05EQTBNak0xTXpNM1doY05NakF3TkRBegpNak0xTXpVM1dqQXBNU2N3SlFZRFZRUURFeDVwWkdWdWRHbDBlUzVzYVc1clpYSmtMbU5zZFhOMFpYSXViRzlqCllXd3dXVEFUQmdjcWhrak9QUUlCQmdncWhrak9QUU1CQndOQ0FBVCtTYjVYNHdpNFhQMFgzckp3TXAyM1ZCZGcKRU1NVThFVStLRzhVSTJMbUM1VmpnNVJXTE9XNkJKakJtalhWaUtNK2IrMS9vS0FlT2c2RnJKazhxeUZsbzBJdwpRREFPQmdOVkhROEJBZjhFQkFNQ0FRWXdIUVlEVlIwbEJCWXdGQVlJS3dZQkJRVUhBd0VHQ0NzR0FRVUZCd01DCk1BOEdBMVVkRXdFQi93UUZNQU1CQWY4d0NnWUlLb1pJemowRUF3SURTQUF3UlFJaEFLVUZHM3NZT1MrK2Jha1cKWW1KWlU0NWlDZFRMdGFlbE1EU0ZpSG9DOWVCS0FpQkRXenpvKy9DWUxMbW4zM2JBRW44cFFub2dQNEZ4MDZhagorVTlLNFdsYnpBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
-  key.pem: LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSUhaaEFWTnNwSlRzMWZ4YmZ4VmptTTJvMTNTOFd4U2VVdTlrNFhZK0NPY3JvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFL2ttK1YrTUl1Rno5Rjk2eWNES2R0MVFYWUJEREZQQkZQaWh2RkNOaTVndVZZNE9VVml6bAp1Z1NZd1pvMTFZaWpQbS90ZjZDZ0hqb09oYXlaUEtzaFpRPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQo=
 ---
 kind: Service
 apiVersion: v1
@@ -695,7 +680,7 @@ spec:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
-        linkerd.io/proxy-version: UPGRADE-PROXY-VERSION
+        linkerd.io/proxy-version: install-proxy-version
       creationTimestamp: null
       labels:
         linkerd.io/control-plane-component: identity
@@ -706,7 +691,7 @@ spec:
       - args:
         - identity
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:UPGRADE-CONTROL-PLANE-VERSION
+        image: gcr.io/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -730,8 +715,6 @@ spec:
         volumeMounts:
         - mountPath: /var/run/linkerd/config
           name: config
-        - mountPath: /var/run/linkerd/identity/issuer
-          name: identity-issuer
       - env:
         - name: LINKERD2_PROXY_LOG
           value: warn,linkerd2_proxy=info
@@ -762,15 +745,14 @@ spec:
         - name: LINKERD2_PROXY_IDENTITY_TRUST_ANCHORS
           value: |
             -----BEGIN CERTIFICATE-----
-            MIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0
-            eS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz
-            MjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j
-            YWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg
-            EMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw
-            QDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
-            MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW
-            YmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj
-            +U9K4WlbzA==
+            MIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy
+            LmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE
+            AxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0
+            xtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364
+            6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF
+            BQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE
+            AiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv
+            OLO4Zsk1XrGZHGsmyiEyvYF9lpY=
             -----END CERTIFICATE-----
         - name: LINKERD2_PROXY_IDENTITY_TOKEN_FILE
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -790,7 +772,7 @@ spec:
           value: linkerd-identity.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_DESTINATION_SVC_NAME
           value: linkerd-controller.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:UPGRADE-PROXY-VERSION
+        image: gcr.io/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -855,9 +837,6 @@ spec:
       - configMap:
           name: linkerd-config
         name: config
-      - name: identity-issuer
-        secret:
-          secretName: linkerd-identity-issuer
       - emptyDir:
           medium: Memory
         name: linkerd-identity-end-entity
@@ -924,7 +903,7 @@ spec:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
-        linkerd.io/proxy-version: UPGRADE-PROXY-VERSION
+        linkerd.io/proxy-version: install-proxy-version
       creationTimestamp: null
       labels:
         linkerd.io/control-plane-component: controller
@@ -938,7 +917,7 @@ spec:
         - -tap-addr=linkerd-tap.linkerd.svc.cluster.local:8088
         - -controller-namespace=linkerd
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:UPGRADE-CONTROL-PLANE-VERSION
+        image: gcr.io/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -968,7 +947,7 @@ spec:
         - -controller-namespace=linkerd
         - -enable-h2-upgrade=true
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:UPGRADE-CONTROL-PLANE-VERSION
+        image: gcr.io/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1022,15 +1001,14 @@ spec:
         - name: LINKERD2_PROXY_IDENTITY_TRUST_ANCHORS
           value: |
             -----BEGIN CERTIFICATE-----
-            MIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0
-            eS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz
-            MjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j
-            YWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg
-            EMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw
-            QDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
-            MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW
-            YmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj
-            +U9K4WlbzA==
+            MIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy
+            LmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE
+            AxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0
+            xtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364
+            6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF
+            BQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE
+            AiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv
+            OLO4Zsk1XrGZHGsmyiEyvYF9lpY=
             -----END CERTIFICATE-----
         - name: LINKERD2_PROXY_IDENTITY_TOKEN_FILE
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -1050,7 +1028,7 @@ spec:
           value: linkerd-identity.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_DESTINATION_SVC_NAME
           value: linkerd-controller.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:UPGRADE-PROXY-VERSION
+        image: gcr.io/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1165,7 +1143,7 @@ spec:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
-        linkerd.io/proxy-version: UPGRADE-PROXY-VERSION
+        linkerd.io/proxy-version: install-proxy-version
       creationTimestamp: null
       labels:
         linkerd.io/control-plane-component: web
@@ -1178,7 +1156,7 @@ spec:
         - -grafana-addr=linkerd-grafana.linkerd.svc.cluster.local:3000
         - -controller-namespace=linkerd
         - -log-level=info
-        image: gcr.io/linkerd-io/web:UPGRADE-CONTROL-PLANE-VERSION
+        image: gcr.io/linkerd-io/web:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1232,15 +1210,14 @@ spec:
         - name: LINKERD2_PROXY_IDENTITY_TRUST_ANCHORS
           value: |
             -----BEGIN CERTIFICATE-----
-            MIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0
-            eS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz
-            MjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j
-            YWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg
-            EMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw
-            QDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
-            MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW
-            YmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj
-            +U9K4WlbzA==
+            MIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy
+            LmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE
+            AxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0
+            xtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364
+            6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF
+            BQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE
+            AiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv
+            OLO4Zsk1XrGZHGsmyiEyvYF9lpY=
             -----END CERTIFICATE-----
         - name: LINKERD2_PROXY_IDENTITY_TOKEN_FILE
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -1260,7 +1237,7 @@ spec:
           value: linkerd-identity.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_DESTINATION_SVC_NAME
           value: linkerd-controller.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:UPGRADE-PROXY-VERSION
+        image: gcr.io/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1461,7 +1438,7 @@ spec:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
-        linkerd.io/proxy-version: UPGRADE-PROXY-VERSION
+        linkerd.io/proxy-version: install-proxy-version
       creationTimestamp: null
       labels:
         linkerd.io/control-plane-component: prometheus
@@ -1533,15 +1510,14 @@ spec:
         - name: LINKERD2_PROXY_IDENTITY_TRUST_ANCHORS
           value: |
             -----BEGIN CERTIFICATE-----
-            MIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0
-            eS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz
-            MjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j
-            YWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg
-            EMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw
-            QDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
-            MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW
-            YmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj
-            +U9K4WlbzA==
+            MIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy
+            LmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE
+            AxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0
+            xtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364
+            6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF
+            BQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE
+            AiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv
+            OLO4Zsk1XrGZHGsmyiEyvYF9lpY=
             -----END CERTIFICATE-----
         - name: LINKERD2_PROXY_IDENTITY_TOKEN_FILE
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -1561,7 +1537,7 @@ spec:
           value: linkerd-identity.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_DESTINATION_SVC_NAME
           value: linkerd-controller.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:UPGRADE-PROXY-VERSION
+        image: gcr.io/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1732,7 +1708,7 @@ spec:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
-        linkerd.io/proxy-version: UPGRADE-PROXY-VERSION
+        linkerd.io/proxy-version: install-proxy-version
       creationTimestamp: null
       labels:
         linkerd.io/control-plane-component: grafana
@@ -1743,7 +1719,7 @@ spec:
       - env:
         - name: GF_PATHS_DATA
           value: /data
-        image: gcr.io/linkerd-io/grafana:UPGRADE-CONTROL-PLANE-VERSION
+        image: gcr.io/linkerd-io/grafana:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1797,15 +1773,14 @@ spec:
         - name: LINKERD2_PROXY_IDENTITY_TRUST_ANCHORS
           value: |
             -----BEGIN CERTIFICATE-----
-            MIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0
-            eS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz
-            MjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j
-            YWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg
-            EMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw
-            QDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
-            MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW
-            YmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj
-            +U9K4WlbzA==
+            MIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy
+            LmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE
+            AxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0
+            xtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364
+            6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF
+            BQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE
+            AiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv
+            OLO4Zsk1XrGZHGsmyiEyvYF9lpY=
             -----END CERTIFICATE-----
         - name: LINKERD2_PROXY_IDENTITY_TOKEN_FILE
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -1825,7 +1800,7 @@ spec:
           value: linkerd-identity.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_DESTINATION_SVC_NAME
           value: linkerd-controller.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:UPGRADE-PROXY-VERSION
+        image: gcr.io/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1930,7 +1905,7 @@ spec:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
-        linkerd.io/proxy-version: UPGRADE-PROXY-VERSION
+        linkerd.io/proxy-version: install-proxy-version
       creationTimestamp: null
       labels:
         linkerd.io/control-plane-component: proxy-injector
@@ -1941,7 +1916,7 @@ spec:
       - args:
         - proxy-injector
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:UPGRADE-CONTROL-PLANE-VERSION
+        image: gcr.io/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1998,15 +1973,14 @@ spec:
         - name: LINKERD2_PROXY_IDENTITY_TRUST_ANCHORS
           value: |
             -----BEGIN CERTIFICATE-----
-            MIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0
-            eS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz
-            MjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j
-            YWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg
-            EMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw
-            QDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
-            MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW
-            YmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj
-            +U9K4WlbzA==
+            MIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy
+            LmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE
+            AxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0
+            xtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364
+            6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF
+            BQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE
+            AiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv
+            OLO4Zsk1XrGZHGsmyiEyvYF9lpY=
             -----END CERTIFICATE-----
         - name: LINKERD2_PROXY_IDENTITY_TOKEN_FILE
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -2026,7 +2000,7 @@ spec:
           value: linkerd-identity.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_DESTINATION_SVC_NAME
           value: linkerd-controller.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:UPGRADE-PROXY-VERSION
+        image: gcr.io/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2163,7 +2137,7 @@ spec:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
-        linkerd.io/proxy-version: UPGRADE-PROXY-VERSION
+        linkerd.io/proxy-version: install-proxy-version
       creationTimestamp: null
       labels:
         linkerd.io/control-plane-component: sp-validator
@@ -2174,7 +2148,7 @@ spec:
       - args:
         - sp-validator
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:UPGRADE-CONTROL-PLANE-VERSION
+        image: gcr.io/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2229,15 +2203,14 @@ spec:
         - name: LINKERD2_PROXY_IDENTITY_TRUST_ANCHORS
           value: |
             -----BEGIN CERTIFICATE-----
-            MIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0
-            eS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz
-            MjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j
-            YWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg
-            EMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw
-            QDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
-            MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW
-            YmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj
-            +U9K4WlbzA==
+            MIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy
+            LmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE
+            AxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0
+            xtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364
+            6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF
+            BQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE
+            AiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv
+            OLO4Zsk1XrGZHGsmyiEyvYF9lpY=
             -----END CERTIFICATE-----
         - name: LINKERD2_PROXY_IDENTITY_TOKEN_FILE
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -2257,7 +2230,7 @@ spec:
           value: linkerd-identity.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_DESTINATION_SVC_NAME
           value: linkerd-controller.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:UPGRADE-PROXY-VERSION
+        image: gcr.io/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2369,7 +2342,7 @@ spec:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
-        linkerd.io/proxy-version: UPGRADE-PROXY-VERSION
+        linkerd.io/proxy-version: install-proxy-version
       creationTimestamp: null
       labels:
         linkerd.io/control-plane-component: tap
@@ -2381,7 +2354,7 @@ spec:
         - tap
         - -controller-namespace=linkerd
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:UPGRADE-CONTROL-PLANE-VERSION
+        image: gcr.io/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2432,15 +2405,14 @@ spec:
         - name: LINKERD2_PROXY_IDENTITY_TRUST_ANCHORS
           value: |
             -----BEGIN CERTIFICATE-----
-            MIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0
-            eS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz
-            MjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j
-            YWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg
-            EMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw
-            QDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC
-            MA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW
-            YmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj
-            +U9K4WlbzA==
+            MIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy
+            LmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE
+            AxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0
+            xtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364
+            6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF
+            BQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE
+            AiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv
+            OLO4Zsk1XrGZHGsmyiEyvYF9lpY=
             -----END CERTIFICATE-----
         - name: LINKERD2_PROXY_IDENTITY_TOKEN_FILE
           value: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -2460,7 +2432,7 @@ spec:
           value: linkerd-identity.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_DESTINATION_SVC_NAME
           value: linkerd-controller.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:UPGRADE-PROXY-VERSION
+        image: gcr.io/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
