@@ -1,8 +1,9 @@
 ## compile binaries
-FROM gcr.io/linkerd-io/go-deps:b62fe1ae as golang
+FROM gcr.io/linkerd-io/go-deps:813c9be3 as golang
 WORKDIR /linkerd-build
 COPY cli cli
-COPY chart chart
+COPY charts charts
+
 COPY controller/k8s controller/k8s
 COPY controller/api controller/api
 COPY controller/gen controller/gen
@@ -11,7 +12,7 @@ RUN mkdir -p /out
 
 # Generate static templates
 # TODO: `go generate` does not honor -mod=readonly
-RUN go generate -mod=readonly ./cli
+RUN go generate -mod=readonly ./pkg/charts/static
 
 # Cache builds without version info
 RUN CGO_ENABLED=0 GOOS=darwin  go build -o /out/linkerd-darwin  -tags prod -mod=readonly -ldflags "-s -w" ./cli

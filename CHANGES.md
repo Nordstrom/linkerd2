@@ -1,3 +1,79 @@
+## edge-19.8.2
+
+This edge release introduces the new Linkerd control plane Helm chart, named
+`linkerd2`. Helm users can now install and remove the Linkerd control plane by
+using the `helm install` and `helm delete` commands. Proxy injection also now
+uses Helm charts.
+
+No changes were made to the existing `linkerd install` behavior.
+
+For detailed installation steps using Helm, see the notes for [PR
+#3146](https://github.com/linkerd/linkerd2/pull/3146).
+
+* CLI
+  * Updated `linkerd top` and `linkerd profile --tap` to require
+    `tap.linkerd.io` RBAC privileges, see https://linkerd.io/tap-rbac for more
+    info
+  * Modified `tap.linkerd.io` APIService to enable usage in `kubectl auth can-i`
+    commands
+  * Introduced `--restrict-dashboard-privileges` flag to `linkerd install`
+    command, to restrict the dashboard's default privileges to disallow tap
+* Controller
+  * Introduced a new ClusterRole, `linkerd-linkerd-tap-admin`, which gives
+    cluster-wide tap privileges. Also introduced a new ClusterRoleBinding,
+    `linkerd-linkerd-web-admin`, which binds the `linkerd-web` service account
+    to the new tap ClusterRole
+  * Removed successfully completed `linkerd-heartbeat` jobs from pod listing in
+    the linkerd control plane to streamline `get po` output (thanks
+    @Pothulapati!)
+* Web UI
+  * Updated the web server to use the new tap APIService. If the `linkerd-web`
+    service account is not authorized to tap resources, users will see a link to
+    documentation to remedy the error
+
+## edge-19.8.1
+
+**Significant Update**
+
+This edge release introduces a new tap APIService. The Kubernetes apiserver
+authenticates the requesting tap user and then forwards tap requests to the new
+tap APIServer. The `linkerd tap` command now makes requests against the
+APIService.
+
+With this release, users must be authorized via RBAC to use the `linkerd tap`
+command. Specifically `linkerd tap` requires the `watch` verb on all resources
+in the `tap.linkerd.io/v1alpha1` APIGroup. More granular access is also
+available via sub-resources such as `deployments/tap` and `pods/tap`.
+
+* CLI
+  * Added a check to the `linkerd check` command to validate the user has
+    privileges necessary to create CronJobs
+  * Introduced the `linkerd --as` flag which allows users to impersonate another
+    user for Kubernetes operations
+  * The `linkerd tap` command now makes requests against the tap APIService
+* Controller
+  * Added HTTP security headers on all dashboard responses
+  * Fixed nil pointer dereference in the destination service when an endpoint
+    does not have a `TargetRef`
+  * Added resource limits when HA is enabled
+  * Added RSA support to TLS libraries
+  * Updated the destination service to return `InvalidArgument` for external
+    name services so that the proxy does not immediately fail the request
+  * The `l5d-require-id` header is now set on tap requests so that a connection
+    is established over TLS
+  * Introduced the `APIService/v1alpha1.tap.linkerd.io` global resource
+  * Introduced the `ClusterRoleBinding/linkerd-linkerd-tap-auth-delegator`
+    global resource
+  * Introduced the `Secret/linkerd-tap-tls` resource into the `linkerd`
+    namespace
+  * Introduced the `RoleBinding/linkerd-linkerd-tap-auth-reader` resource into
+    the `kube-system` namespace
+* Proxy
+  * Added the `LINKERD2_PROXY_TAP_SVC_NAME` environment variable so that the tap
+    server attempts to authorize client identities
+* Internal
+  * Replaced `dep` with Go modules for dependency management
+
 ## edge-19.7.5
 
 * CLI
