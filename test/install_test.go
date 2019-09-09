@@ -85,8 +85,9 @@ var (
 		`(Liveness|Readiness) probe failed: HTTP probe failed with statuscode: 50(2|3)`,
 		`(Liveness|Readiness) probe failed: Get http://.*: dial tcp .*: connect: connection refused`,
 		`(Liveness|Readiness) probe failed: Get http://.*: read tcp .*: read: connection reset by peer`,
-		`(Liveness|Readiness) probe failed: Get http://.*: net/http: request canceled \(Client\.Timeout exceeded while awaiting headers\)`,
+		`(Liveness|Readiness) probe failed: Get http://.*: net/http: request canceled .*\(Client\.Timeout exceeded while awaiting headers\)`,
 		`Failed to update endpoint .*-upgrade/linkerd-.*: Operation cannot be fulfilled on endpoints "linkerd-.*": the object has been modified; please apply your changes to the latest version and try again`,
+		`FailedKillPod .* error killing pod: failed to "KillPodSandbox" for ".*" with KillPodSandboxError: "rpc error: code = Unknown desc = failed to destroy network for sandbox \\".*\\": could not teardown ipv4 dnat: running \[/usr/sbin/iptables -t nat -X CNI-DN-.* --wait\]: exit status 1: iptables: No chain/target/match by that name\.\\n"`,
 	}, "|"))
 
 	injectionCases = []struct {
@@ -205,7 +206,16 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 		}
 
 		if out != upgradeFromManifests {
-			t.Fatalf("manifest upgrade differs from k8s upgrade.\nk8s upgrade:\n%s\nmanifest upgrade:\n%s", out, upgradeFromManifests)
+			// retry in case it's just a discrepancy in the heartbeat cron schedule
+			exec := append([]string{cmd}, args...)
+			out, _, err := TestHelper.LinkerdRun(exec...)
+			if err != nil {
+				t.Fatalf("command failed: %v\n%s", exec, out)
+			}
+
+			if out != upgradeFromManifests {
+				t.Fatalf("manifest upgrade differs from k8s upgrade.\nk8s upgrade:\n%s\nmanifest upgrade:\n%s", out, upgradeFromManifests)
+			}
 		}
 	}
 
@@ -336,7 +346,7 @@ func TestInstallSP(t *testing.T) {
 
 func TestDashboard(t *testing.T) {
 	dashboardPort := 52237
-	dashboardURL := fmt.Sprintf("http://127.0.0.1:%d", dashboardPort)
+	dashboardURL := fmt.Sprintf("http://localhost:%d", dashboardPort)
 
 	outputStream, err := TestHelper.LinkerdRunStream("dashboard", "-p",
 		strconv.Itoa(dashboardPort), "--show", "url")
@@ -524,7 +534,12 @@ func TestLogs(t *testing.T) {
 				// does not return 10,000 after 2 seconds. We don't need 10,000 log lines.
 				outputLines, _ := outputStream.ReadUntil(10000, 2*time.Second)
 				if len(outputLines) == 0 {
-					t.Errorf("No logs found for %s", name)
+					// Retry one time for 30 more seconds, in case the cluster is slow to
+					// produce log lines.
+					outputLines, _ = outputStream.ReadUntil(10000, 30*time.Second)
+					if len(outputLines) == 0 {
+						t.Errorf("No logs found for %s", name)
+					}
 				}
 
 				for _, line := range outputLines {

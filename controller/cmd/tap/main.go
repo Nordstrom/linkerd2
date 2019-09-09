@@ -1,4 +1,4 @@
-package main
+package tap
 
 import (
 	"context"
@@ -11,22 +11,26 @@ import (
 	"github.com/linkerd/linkerd2/controller/k8s"
 	"github.com/linkerd/linkerd2/controller/tap"
 	"github.com/linkerd/linkerd2/pkg/admin"
+	"github.com/linkerd/linkerd2/pkg/config"
 	"github.com/linkerd/linkerd2/pkg/flags"
 	pkgK8s "github.com/linkerd/linkerd2/pkg/k8s"
 	log "github.com/sirupsen/logrus"
 )
 
-func main() {
-	apiServerAddr := flag.String("apiserver-addr", ":8089", "address to serve the apiserver on")
-	metricsAddr := flag.String("metrics-addr", ":9998", "address to serve scrapable metrics on")
-	kubeConfigPath := flag.String("kubeconfig", "", "path to kube config")
-	controllerNamespace := flag.String("controller-namespace", "linkerd", "namespace in which Linkerd is installed")
-	tapPort := flag.Uint("tap-port", 4190, "proxy tap port to connect to")
-	tlsCertPath := flag.String("tls-cert", pkgK8s.MountPathTLSCrtPEM, "path to TLS Cert PEM")
-	tlsKeyPath := flag.String("tls-key", pkgK8s.MountPathTLSKeyPEM, "path to TLS Key PEM")
-	disableCommonNames := flag.Bool("disable-common-names", false, "disable checks for Common Names (for development)")
+// Main executes the tap subcommand
+func Main(args []string) {
+	cmd := flag.NewFlagSet("tap", flag.ExitOnError)
 
-	flags.ConfigureAndParse()
+	apiServerAddr := cmd.String("apiserver-addr", ":8089", "address to serve the apiserver on")
+	metricsAddr := cmd.String("metrics-addr", ":9998", "address to serve scrapable metrics on")
+	kubeConfigPath := cmd.String("kubeconfig", "", "path to kube config")
+	controllerNamespace := cmd.String("controller-namespace", "linkerd", "namespace in which Linkerd is installed")
+	tapPort := cmd.Uint("tap-port", 4190, "proxy tap port to connect to")
+	tlsCertPath := cmd.String("tls-cert", pkgK8s.MountPathTLSCrtPEM, "path to TLS Cert PEM")
+	tlsKeyPath := cmd.String("tls-key", pkgK8s.MountPathTLSKeyPEM, "path to TLS Key PEM")
+	disableCommonNames := cmd.Bool("disable-common-names", false, "disable checks for Common Names (for development)")
+
+	flags.ConfigureAndParse(cmd, args)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
@@ -47,7 +51,17 @@ func main() {
 		log.Fatalf("Failed to initialize K8s API: %s", err)
 	}
 
-	grpcTapServer := tap.NewGrpcTapServer(*tapPort, *controllerNamespace, k8sAPI)
+	globalConfig, err := config.Global(pkgK8s.MountPathGlobalConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+	clusterDomain := globalConfig.GetClusterDomain()
+	if clusterDomain == "" {
+		clusterDomain = "cluster.local"
+	}
+	log.Info("Using cluster domain: ", clusterDomain)
+
+	grpcTapServer := tap.NewGrpcTapServer(*tapPort, *controllerNamespace, clusterDomain, k8sAPI)
 
 	// TODO: make this configurable for local development
 	cert, err := tls.LoadX509KeyPair(*tlsCertPath, *tlsKeyPath)

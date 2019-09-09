@@ -1,3 +1,38 @@
+## edge-19.9.1
+
+This edge release adds traffic splits into the Linkerd dashboard as well as a
+variety of other improvements.
+
+* CLI
+  * Improved the error message when the CLI cannot connect to Kubernetes (thanks
+    @alenkacz!)
+  * Added `--address` flag to `linkerd dashboard` (thanks @bmcstdio!)
+* Controller
+  * Fixed an issue where the proxy-injector had insufficient RBAC permissions
+  * Added support for disabling the heartbeat cronjob (thanks @kevtaylor!)
+* Proxy
+  * Decreased proxy Docker image size by removing bundled debug tools
+  * Fixed an issue where the incorrect content-length could be set for GET
+    requests with bodies
+* Web UI
+  * Added trafficsplits as a resource to the dashboard, including a trafficsplit
+    detail page
+* Internal
+  * Added support for Kubernetes 1.16
+
+## edge-19.8.7
+
+* Controller
+  * Added Kubernetes events (and log lines) when the proxy injector injects a
+    deployment, and when injection is skipped
+  * Additional preparation for configuring the cluster base domain (thanks
+    @arminbuerkle!)
+* Proxy
+  * Changed the proxy to require the `LINKERD2_PROXY_DESTINATION_SVC_ADDR`
+    environment variable when starting up
+* Web UI
+  * Increased dashboard speed by consolidating existing Prometheus queries
+
 ## edge-19.8.6
 
 A new Grafana dashboard has been added which shows historical data for a

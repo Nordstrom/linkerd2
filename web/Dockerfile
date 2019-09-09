@@ -21,7 +21,7 @@ COPY web/app ./web/app
 RUN ./bin/web build
 
 ## compile go server
-FROM gcr.io/linkerd-io/go-deps:df2264ad as golang
+FROM gcr.io/linkerd-io/go-deps:c921a98b as golang
 WORKDIR /linkerd-build
 RUN mkdir -p web
 COPY web/main.go web
@@ -29,10 +29,10 @@ COPY web/srv web/srv
 COPY controller controller
 COPY pkg pkg
 
-RUN CGO_ENABLED=0 GOOS=linux go build -mod=readonly -o web/web ./web
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=readonly -o web/web -ldflags "-s -w" ./web
 
 ## package it all up
-FROM gcr.io/linkerd-io/base:2019-02-19.01
+FROM debian:stretch-20190812-slim
 WORKDIR /linkerd
 
 COPY LICENSE .

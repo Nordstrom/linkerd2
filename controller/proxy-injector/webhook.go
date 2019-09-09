@@ -12,7 +12,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	admissionv1beta1 "k8s.io/api/admission/v1beta1"
 	v1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 )
@@ -66,9 +65,8 @@ func Inject(api *k8s.API,
 	if ownerRef := resourceConfig.GetOwnerRef(); ownerRef != nil {
 		objs, err := api.GetObjects(request.Namespace, ownerRef.Kind, ownerRef.Name)
 		if err != nil {
-			return nil, err
-		}
-		if len(objs) == 0 {
+			log.Warnf("couldn't retrieve parent object %s-%s-%s; error: %s", request.Namespace, ownerRef.Kind, ownerRef.Name, err)
+		} else if len(objs) == 0 {
 			log.Warnf("couldn't retrieve parent object %s-%s-%s", request.Namespace, ownerRef.Kind, ownerRef.Name)
 		} else {
 			parent = &objs[0]
@@ -109,7 +107,7 @@ func Inject(api *k8s.API,
 }
 
 func ownerRetriever(api *k8s.API, ns string) inject.OwnerRetrieverFunc {
-	return func(p *v1.Pod) *metav1.OwnerReference {
+	return func(p *v1.Pod) (string, string) {
 		p.SetNamespace(ns)
 		return api.GetOwnerKindAndName(p, true)
 	}

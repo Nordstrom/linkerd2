@@ -15,7 +15,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/api/extensions/v1beta1"
 	k8sResource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,7 +50,8 @@ const (
 )
 
 // OwnerRetrieverFunc is a function that returns a pod's owner reference
-type OwnerRetrieverFunc func(*corev1.Pod) *metav1.OwnerReference
+// kind and name
+type OwnerRetrieverFunc func(*corev1.Pod) (string, string)
 
 // ResourceConfig contains the parsed information for a given workload
 type ResourceConfig struct {
@@ -124,7 +124,7 @@ func (conf *ResourceConfig) WithOwnerRetriever(f OwnerRetrieverFunc) *ResourceCo
 	return conf
 }
 
-// GetOwnerRef returns a reference to the the resource's owner resource, if any
+// GetOwnerRef returns a reference to the resource's owner resource, if any
 func (conf *ResourceConfig) GetOwnerRef() *metav1.OwnerReference {
 	return conf.workload.ownerRef
 }
@@ -216,15 +216,15 @@ func (conf *ResourceConfig) GetPatch(injectProxy bool) ([]byte, error) {
 func (conf *ResourceConfig) getFreshWorkloadObj() runtime.Object {
 	switch strings.ToLower(conf.workload.metaType.Kind) {
 	case k8s.Deployment:
-		return &v1beta1.Deployment{}
+		return &appsv1.Deployment{}
 	case k8s.ReplicationController:
 		return &corev1.ReplicationController{}
 	case k8s.ReplicaSet:
-		return &v1beta1.ReplicaSet{}
+		return &appsv1.ReplicaSet{}
 	case k8s.Job:
 		return &batchv1.Job{}
 	case k8s.DaemonSet:
-		return &v1beta1.DaemonSet{}
+		return &appsv1.DaemonSet{}
 	case k8s.StatefulSet:
 		return &appsv1.StatefulSet{}
 	case k8s.Pod:
@@ -278,7 +278,7 @@ func (conf *ResourceConfig) parse(bytes []byte) error {
 	obj := conf.getFreshWorkloadObj()
 
 	switch v := obj.(type) {
-	case *v1beta1.Deployment:
+	case *appsv1.Deployment:
 		if err := yaml.Unmarshal(bytes, v); err != nil {
 			return err
 		}
@@ -298,7 +298,7 @@ func (conf *ResourceConfig) parse(bytes []byte) error {
 		conf.pod.labels[k8s.ProxyReplicationControllerLabel] = v.Name
 		conf.complete(v.Spec.Template)
 
-	case *v1beta1.ReplicaSet:
+	case *appsv1.ReplicaSet:
 		if err := yaml.Unmarshal(bytes, v); err != nil {
 			return err
 		}
@@ -318,7 +318,7 @@ func (conf *ResourceConfig) parse(bytes []byte) error {
 		conf.pod.labels[k8s.ProxyJobLabel] = v.Name
 		conf.complete(&v.Spec.Template)
 
-	case *v1beta1.DaemonSet:
+	case *appsv1.DaemonSet:
 		if err := yaml.Unmarshal(bytes, v); err != nil {
 			return err
 		}
@@ -348,9 +348,9 @@ func (conf *ResourceConfig) parse(bytes []byte) error {
 		conf.pod.meta = &v.ObjectMeta
 
 		if conf.ownerRetriever != nil {
-			conf.workload.ownerRef = conf.ownerRetriever(v)
-			name := conf.workload.ownerRef.Name
-			switch strings.ToLower(conf.workload.ownerRef.Kind) {
+			kind, name := conf.ownerRetriever(v)
+			conf.workload.ownerRef = &metav1.OwnerReference{Kind: kind, Name: name}
+			switch kind {
 			case k8s.Deployment:
 				conf.pod.labels[k8s.ProxyDeploymentLabel] = name
 			case k8s.ReplicationController:

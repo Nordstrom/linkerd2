@@ -92,7 +92,7 @@ const (
 	LinkerdAPIChecks CategoryID = "linkerd-api"
 
 	// LinkerdVersionChecks adds a series of checks to query for the latest
-	// version, and validate the the CLI is up to date.
+	// version, and validate the CLI is up to date.
 	LinkerdVersionChecks CategoryID = "linkerd-version"
 
 	// LinkerdControlPlaneVersionChecks adds a series of checks to validate that
@@ -104,7 +104,7 @@ const (
 	LinkerdControlPlaneVersionChecks CategoryID = "control-plane-version"
 
 	// LinkerdDataPlaneChecks adds data plane checks to validate that the data
-	// plane namespace exists, and that the the proxy containers are in a ready
+	// plane namespace exists, and that the proxy containers are in a ready
 	// state and running the latest available version.
 	// These checks are dependent on the output of KubernetesAPIChecks,
 	// `apiClient` from LinkerdControlPlaneExistenceChecks, and `latestVersions`
@@ -166,6 +166,26 @@ func (e *ResourceError) Error() string {
 		names = append(names, res.name)
 	}
 	return fmt.Sprintf("%s found but should not exist: %s", e.resourceName, strings.Join(names, " "))
+}
+
+// CategoryError provides a custom error type that also contains check category that emitted the error,
+// useful when needed to distinguish between errors from multiple categories
+type CategoryError struct {
+	Category CategoryID
+	Err      error
+}
+
+// Error satisfies the error interface for CategoryError.
+func (e *CategoryError) Error() string {
+	return e.Err.Error()
+}
+
+// IsCategoryError returns true if passed in error is of type CategoryError and belong to the given category
+func IsCategoryError(err error, categoryID CategoryID) bool {
+	if ce, ok := err.(*CategoryError); ok {
+		return ce.Category == categoryID
+	}
+	return false
 }
 
 type checker struct {
@@ -393,7 +413,7 @@ func (hc *HealthChecker) allCategories() []category {
 					description: "can create Deployments",
 					hintAnchor:  "pre-k8s",
 					check: func(context.Context) error {
-						return hc.checkCanCreate(hc.ControlPlaneNamespace, "extensions", "v1beta1", "deployments")
+						return hc.checkCanCreate(hc.ControlPlaneNamespace, "apps", "v1", "deployments")
 					},
 				},
 				{
@@ -881,6 +901,9 @@ func (hc *HealthChecker) runCheck(categoryID CategoryID, c *checker, observer ch
 		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 		defer cancel()
 		err := c.check(ctx)
+		if err != nil {
+			err = &CategoryError{categoryID, err}
+		}
 		checkResult := &CheckResult{
 			Category:    categoryID,
 			Description: c.description,
@@ -910,6 +933,9 @@ func (hc *HealthChecker) runCheckRPC(categoryID CategoryID, c *checker, observer
 	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
 	checkRsp, err := c.checkRPC(ctx)
+	if err != nil {
+		err = &CategoryError{categoryID, err}
+	}
 	observer(&CheckResult{
 		Category:    categoryID,
 		Description: c.description,
@@ -925,6 +951,9 @@ func (hc *HealthChecker) runCheckRPC(categoryID CategoryID, c *checker, observer
 		var err error
 		if check.Status != healthcheckPb.CheckStatus_OK {
 			err = fmt.Errorf(check.FriendlyMessageToUser)
+		}
+		if err != nil {
+			err = &CategoryError{categoryID, err}
 		}
 		observer(&CheckResult{
 			Category:    categoryID,
