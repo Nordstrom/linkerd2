@@ -49,14 +49,17 @@ func testRenderHelm(t *testing.T, chart *pb.Chart, goldenFileName string) {
     "TrustAnchorsPEM":"test-trust-anchor",
     "TrustDomain":"test.trust.domain",
     "Issuer":{
-      "CrtExpiry":"Jul 30 17:21:14 2020",
-      "CrtExpiryAnnotation":"%s",
-      "TLS":{
-        "KeyPEM":"test-key-pem",
-        "CrtPEM":"test-crt-pem"
-      }
+			"IssuerType":"linkerd"
     }
-  },
+	},
+	"LinkerdIdentityIssuer":{
+		"CrtExpiry":"Jul 30 17:21:14 2020",
+		"CrtExpiryAnnotation":"%s",
+		"TLS":{
+			"KeyPEM":"test-key-pem",
+			"CrtPEM":"test-crt-pem"
+		}
+	},
   "Configs": null,
   "Proxy":{
     "Image":{
