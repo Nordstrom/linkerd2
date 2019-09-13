@@ -7,7 +7,7 @@ EnableH2Upgrade: true
 ImagePullPolicy: &image_pull_policy IfNotPresent
 
 # control plane version. See Proxy section for proxy version
-LinkerdVersion: &linkerd_version edge-19.9.1
+LinkerdVersion: &linkerd_version edge-19.9.2
 
 Namespace: linkerd
 OmitWebhookSideEffects: false
@@ -83,7 +83,7 @@ ProxyInit:
   Image:
     Name: gcr.io/linkerd-io/proxy-init
     PullPolicy: *image_pull_policy
-    Version: v1.0.0
+    Version: v1.1.0
   Resources:
     CPU:
       Limit: 100m
