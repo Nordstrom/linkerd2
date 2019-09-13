@@ -734,6 +734,7 @@ data:
         "trustDomain": "test.trust.domain",
         "trustAnchorsPem": "test-trust-anchor",
         "issuanceLifeTime": "",
+        "issuerType": "linkerd",
         "clockSkewAllowance": "20s"
       },
       "autoInjectContext": null,
