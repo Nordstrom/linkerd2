@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -60,10 +61,22 @@ type (
 		replicas    uint
 		trustDomain string
 
-		issuanceLifetime   time.Duration
-		clockSkewAllowance time.Duration
+		issuerType       string
+		issuanceLifetime time.Duration
 
-		trustPEMFile, crtPEMFile, keyPEMFile string
+		trustPEMFile string
+
+		*linkerdIdentityIssuerOptions
+		*awsAcmPcaIdentityIssuerOptions
+	}
+
+	awsAcmPcaIdentityIssuerOptions struct {
+		region, arn string
+	}
+
+	linkerdIdentityIssuerOptions struct {
+		crtPEMFile, keyPEMFile string
+		clockSkewAllowance     time.Duration
 	}
 )
 
@@ -148,16 +161,6 @@ func newInstallOptionsWithDefaults() (*installOptions, error) {
 		return nil, err
 	}
 
-	issuanceLifetime, err := time.ParseDuration(defaults.Identity.Issuer.IssuanceLifetime)
-	if err != nil {
-		return nil, err
-	}
-
-	clockSkewAllowance, err := time.ParseDuration(defaults.Identity.Issuer.ClockSkewAllowance)
-	if err != nil {
-		return nil, err
-	}
-
 	return &installOptions{
 		controlPlaneVersion:         version.Version,
 		controllerReplicas:          defaults.ControllerReplicas,
@@ -190,11 +193,7 @@ func newInstallOptionsWithDefaults() (*installOptions, error) {
 			proxyMemoryLimit:       defaults.Proxy.Resources.Memory.Limit,
 			enableExternalProfiles: defaults.Proxy.EnableExternalProfiles,
 		},
-		identityOptions: &installIdentityOptions{
-			trustDomain:        defaults.Identity.TrustDomain,
-			issuanceLifetime:   issuanceLifetime,
-			clockSkewAllowance: clockSkewAllowance,
-		},
+		identityOptions: newInstallIdentityOptionsWithDefaults(defaults),
 
 		generateUUID: func() string {
 			id, err := uuid.NewRandom()
@@ -227,6 +226,35 @@ func newInstallOptionsWithDefaults() (*installOptions, error) {
 //
 // allStageFlagSet is a subset of recordableFlagSet, but is also added to `linkerd [install|upgrade] config`
 // proxyConfigOptions.flagSet is a subset of recordableFlagSet, and is used by `linkerd inject`.
+func newInstallIdentityOptionsWithDefaults(defaults *charts.Values) *installIdentityOptions {
+	issuanceLifetime, err := time.ParseDuration(defaults.Identity.Issuer.IssuanceLifetime)
+	if err != nil {
+		return nil
+	}
+
+	return &installIdentityOptions{
+		trustDomain:                    defaults.Identity.TrustDomain,
+		issuerType:                     defaults.Identity.Issuer.IssuerType,
+		issuanceLifetime:               issuanceLifetime,
+		linkerdIdentityIssuerOptions:   newLinkerdIdentityIssuerOptionsWithDefaults(defaults),
+		awsAcmPcaIdentityIssuerOptions: newAwsAcmPcaOptions(),
+	}
+}
+
+func newLinkerdIdentityIssuerOptionsWithDefaults(defaults *charts.Values) *linkerdIdentityIssuerOptions {
+	clockSkewAllowance, err := time.ParseDuration(defaults.LinkerdIdentityIssuer.ClockSkewAllowance)
+	if err != nil {
+		return nil
+	}
+
+	return &linkerdIdentityIssuerOptions{
+		clockSkewAllowance: clockSkewAllowance,
+	}
+}
+
+func newAwsAcmPcaOptions() *awsAcmPcaIdentityIssuerOptions {
+	return &awsAcmPcaIdentityIssuerOptions{}
+}
 
 // newCmdInstallConfig is a subcommand for `linkerd install config`
 func newCmdInstallConfig(options *installOptions, parentFlags *pflag.FlagSet) *cobra.Command {
@@ -386,18 +414,22 @@ func (options *installOptions) validateAndBuild(stage string, flags *pflag.FlagS
 
 	options.recordFlags(flags)
 
-	identityValues, err := options.identityOptions.validateAndBuild()
+	identityValues, linkerdIdentityIssuerVals, awsAcmPcaIdentityIssuerVals, err := options.identityOptions.validateAndBuild()
 	if err != nil {
 		return nil, nil, err
 	}
-	configs := options.configs(toIdentityContext(identityValues))
+
+	configs := options.configs(identityContextFrom(identityValues, linkerdIdentityIssuerVals, awsAcmPcaIdentityIssuerVals))
 
 	values, err := options.buildValuesWithoutIdentity(configs)
 	if err != nil {
 		return nil, nil, err
 	}
-	values.Identity = identityValues
 	values.Stage = stage
+
+	values.Identity = identityValues
+	values.LinkerdIdentityIssuer = linkerdIdentityIssuerVals
+	values.AwsAcmPcaIdentityIssuer = awsAcmPcaIdentityIssuerVals
 
 	return values, configs, nil
 }
@@ -431,6 +463,14 @@ func (options *installOptions) recordableFlagSet() *pflag.FlagSet {
 	flags.BoolVar(
 		&options.disableH2Upgrade, "disable-h2-upgrade", options.disableH2Upgrade,
 		"Prevents the controller from instructing proxies to perform transparent HTTP/2 upgrading (default false)",
+	)
+	flags.StringVar(
+		&options.identityOptions.region, "identity-ca-region", options.identityOptions.region,
+		"The region where the CA is located.",
+	)
+	flags.StringVar(
+		&options.identityOptions.arn, "identity-ca-arn", options.identityOptions.arn,
+		"The arn of the CA.",
 	)
 	flags.DurationVar(
 		&options.identityOptions.issuanceLifetime, "identity-issuance-lifetime", options.identityOptions.issuanceLifetime,
@@ -489,6 +529,10 @@ func (options *installOptions) installOnlyFlagSet() *pflag.FlagSet {
 	flags.StringVar(
 		&options.identityOptions.keyPEMFile, "identity-issuer-key-file", options.identityOptions.keyPEMFile,
 		"A path to a PEM-encoded file containing the Linkerd Identity issuer private key (generated by default)",
+	)
+	flags.StringVar(
+		&options.identityOptions.issuerType, "identity-issuer-type", options.identityOptions.issuerType,
+		"The type of CA to use for issuing proxy certificates. (linkerd (default), awsacmpca)",
 	)
 
 	return flags
@@ -889,121 +933,198 @@ func (idopts *installIdentityOptions) validate() error {
 		return nil
 	}
 
-	if idopts.trustDomain != "" {
-		if errs := validation.IsDNS1123Subdomain(idopts.trustDomain); len(errs) > 0 {
-			return fmt.Errorf("invalid trust domain '%s': %s", idopts.trustDomain, errs[0])
-		}
-	}
-
-	if idopts.trustPEMFile != "" || idopts.crtPEMFile != "" || idopts.keyPEMFile != "" {
-		if idopts.trustPEMFile == "" {
-			return errors.New("a trust anchors file must be specified if other credentials are provided")
-		}
-		if idopts.crtPEMFile == "" {
-			return errors.New("a certificate file must be specified if other credentials are provided")
-		}
-		if idopts.keyPEMFile == "" {
-			return errors.New("a private key file must be specified if other credentials are provided")
+	switch issuerType := idopts.issuerType; issuerType {
+	case charts.LinkerdIdentityIssuerType:
+		if idopts.trustDomain != "" {
+			if errs := validation.IsDNS1123Subdomain(idopts.trustDomain); len(errs) > 0 {
+				return fmt.Errorf("invalid trust domain '%s': %s", idopts.trustDomain, errs[0])
+			}
 		}
 
-		for _, f := range []string{idopts.trustPEMFile, idopts.crtPEMFile, idopts.keyPEMFile} {
-			stat, err := os.Stat(f)
-			if err != nil {
-				return fmt.Errorf("missing file: %s", err)
+		if idopts.trustPEMFile != "" || idopts.crtPEMFile != "" || idopts.keyPEMFile != "" {
+			if idopts.trustPEMFile == "" {
+				return errors.New("a trust anchors file must be specified if other credentials are provided")
 			}
-			if stat.IsDir() {
-				return fmt.Errorf("not a file: %s", f)
+			if idopts.crtPEMFile == "" {
+				return errors.New("a certificate file must be specified if other credentials are provided")
 			}
+			if idopts.keyPEMFile == "" {
+				return errors.New("a private key file must be specified if other credentials are provided")
+			}
+
+			for _, f := range []string{idopts.trustPEMFile, idopts.crtPEMFile, idopts.keyPEMFile} {
+				stat, err := os.Stat(f)
+				if err != nil {
+					return fmt.Errorf("missing file: %s", err)
+				}
+				if stat.IsDir() {
+					return fmt.Errorf("not a file: %s", f)
+				}
+			}
+		}
+	case charts.AwsAcmPcaIdentityIssuerType:
+		if len(idopts.region) == 0 {
+			return errors.New("a region must be specified if using the awsacmpca caType")
+		}
+		if len(idopts.arn) == 0 {
+			return errors.New("the awsacmpca arn must be specified if using the awsacmpca caType")
+		}
+		if len(idopts.trustPEMFile) == 0 {
+			return errors.New("a trust anchors file must be specified if uswing the awsacmpca caType")
+		}
+		if idopts.issuanceLifetime < time.Hour*24 {
+			return errors.New("an issuance lifetime of > 1 day must be provided if using the awsacmpca caType")
+		}
+
+		stat, err := os.Stat(idopts.trustPEMFile)
+		if err != nil {
+			return fmt.Errorf("missing file: %s", err)
+		}
+		if stat.IsDir() {
+			return fmt.Errorf("not a file: %s", idopts.trustPEMFile)
 		}
 	}
 
 	return nil
 }
 
-func (idopts *installIdentityOptions) validateAndBuild() (*charts.Identity, error) {
+func (idopts *installIdentityOptions) validateAndBuild() (*charts.Identity, *charts.LinkerdIdentityIssuer, *charts.AwsAcmPcaIdentityIssuer, error) {
 	if idopts == nil {
-		return nil, nil
+		return nil, nil, nil, nil
 	}
 
 	if err := idopts.validate(); err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	if idopts.trustPEMFile != "" && idopts.crtPEMFile != "" && idopts.keyPEMFile != "" {
-		return idopts.readValues()
+	switch idopts.issuerType {
+	case charts.LinkerdIdentityIssuerType:
+		if idopts.trustPEMFile != "" && idopts.crtPEMFile != "" && idopts.keyPEMFile != "" {
+			identityValues, linkerdIdentityIssuerValues, err := idopts.readValues()
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			return identityValues, linkerdIdentityIssuerValues, nil, nil
+		}
+	case charts.AwsAcmPcaIdentityIssuerType:
+		if len(idopts.trustPEMFile) > 0 {
+			_, trustAnchorsPEM, err := idopts.readTrustAnchorsPemFile()
+			if err != nil {
+				return nil, nil, nil, err
+			}
+
+			identity := &charts.Identity{
+				TrustDomain:     idopts.trustDomain,
+				TrustAnchorsPEM: trustAnchorsPEM,
+				Issuer: &charts.Issuer{
+					IssuanceLifetime: idopts.issuanceLifetime.String(),
+					IssuerType:       idopts.issuerType,
+				},
+			}
+			awsAcmPcaIdentityIssuer := &charts.AwsAcmPcaIdentityIssuer{
+				CaArn:    idopts.arn,
+				CaRegion: idopts.region,
+			}
+
+			return identity, nil, awsAcmPcaIdentityIssuer, nil
+		}
 	}
 
-	return idopts.genValues()
+	gennedIdentity, gennedLinkerdIdentityIssuer, err := idopts.genValues()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return gennedIdentity, gennedLinkerdIdentityIssuer, nil, nil
 }
 
 func (idopts *installIdentityOptions) issuerName() string {
 	return fmt.Sprintf("identity.%s.%s", controlPlaneNamespace, idopts.trustDomain)
 }
 
-func (idopts *installIdentityOptions) genValues() (*charts.Identity, error) {
+func (idopts *installIdentityOptions) genValues() (*charts.Identity, *charts.LinkerdIdentityIssuer, error) {
 	root, err := tls.GenerateRootCAWithDefaults(idopts.issuerName())
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate root certificate for identity: %s", err)
+		return nil, nil, fmt.Errorf("failed to generate root certificate for identity: %s", err)
 	}
 
 	return &charts.Identity{
-		TrustDomain:     idopts.trustDomain,
-		TrustAnchorsPEM: root.Cred.Crt.EncodeCertificatePEM(),
-		Issuer: &charts.Issuer{
+			TrustDomain:     idopts.trustDomain,
+			TrustAnchorsPEM: root.Cred.Crt.EncodeCertificatePEM(),
+			Issuer: &charts.Issuer{
+				IssuanceLifetime: idopts.issuanceLifetime.String(),
+				IssuerType:       idopts.issuerType,
+			},
+		},
+		&charts.LinkerdIdentityIssuer{
 			ClockSkewAllowance:  idopts.clockSkewAllowance.String(),
-			IssuanceLifetime:    idopts.issuanceLifetime.String(),
 			CrtExpiry:           root.Cred.Crt.Certificate.NotAfter,
 			CrtExpiryAnnotation: k8s.IdentityIssuerExpiryAnnotation,
 			TLS: &charts.TLS{
 				KeyPEM: root.Cred.EncodePrivateKeyPEM(),
 				CrtPEM: root.Cred.Crt.EncodeCertificatePEM(),
 			},
-		},
-	}, nil
+		}, nil
 }
 
 // readValues attempts to read an issuer configuration from disk
-// to produce an `installIdentityValues`.
+// to produce an `installIdentityValues` and associated `installLinkerdIdentityIssuerValues`.
 //
 // The identity options must have already been validated.
-func (idopts *installIdentityOptions) readValues() (*charts.Identity, error) {
+func (idopts *installIdentityOptions) readValues() (*charts.Identity, *charts.LinkerdIdentityIssuer, error) {
 	creds, err := tls.ReadPEMCreds(idopts.keyPEMFile, idopts.crtPEMFile)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	trustb, err := ioutil.ReadFile(idopts.trustPEMFile)
+	roots, trustAnchorsPEM, err := idopts.readTrustAnchorsPemFile()
 	if err != nil {
-		return nil, err
-	}
-	trustAnchorsPEM := string(trustb)
-	roots, err := tls.DecodePEMCertPool(trustAnchorsPEM)
-	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := creds.Verify(roots, idopts.issuerName()); err != nil {
-		return nil, fmt.Errorf("invalid credentials: %s", err)
+		return nil, nil, fmt.Errorf("invalid credentials: %s", err)
 	}
 
 	return &charts.Identity{
-		TrustDomain:     idopts.trustDomain,
-		TrustAnchorsPEM: trustAnchorsPEM,
-		Issuer: &charts.Issuer{
+			TrustDomain:     idopts.trustDomain,
+			TrustAnchorsPEM: trustAnchorsPEM,
+			Issuer: &charts.Issuer{
+				IssuanceLifetime: idopts.issuanceLifetime.String(),
+				IssuerType:       idopts.issuerType,
+			},
+		},
+		&charts.LinkerdIdentityIssuer{
 			ClockSkewAllowance:  idopts.clockSkewAllowance.String(),
-			IssuanceLifetime:    idopts.issuanceLifetime.String(),
 			CrtExpiry:           creds.Crt.Certificate.NotAfter,
 			CrtExpiryAnnotation: k8s.IdentityIssuerExpiryAnnotation,
 			TLS: &charts.TLS{
 				KeyPEM: creds.EncodePrivateKeyPEM(),
 				CrtPEM: creds.EncodeCertificatePEM(),
 			},
-		},
-	}, nil
+		}, nil
 }
 
-func toIdentityContext(idvals *charts.Identity) *pb.IdentityContext {
+func (idopts *installIdentityOptions) readTrustAnchorsPemFile() (*x509.CertPool, string, error) {
+	trustb, err := ioutil.ReadFile(idopts.trustPEMFile)
+	if err != nil {
+		return nil, "", err
+	}
+
+	trustAnchorsPEM := string(trustb)
+	roots, err := tls.DecodePEMCertPool(trustAnchorsPEM)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return roots, trustAnchorsPEM, nil
+}
+
+func identityContextFrom(idvals *charts.Identity, linkerdIdentityIssuerVals *charts.LinkerdIdentityIssuer, awsAcmPcaIdentityIssuerVals *charts.AwsAcmPcaIdentityIssuer) *pb.IdentityContext {
 	if idvals == nil {
+		return nil
+	}
+
+	if linkerdIdentityIssuerVals == nil && awsAcmPcaIdentityIssuerVals == nil {
 		return nil
 	}
 
@@ -1011,16 +1132,31 @@ func toIdentityContext(idvals *charts.Identity) *pb.IdentityContext {
 	if err != nil {
 		il = defaultIdentityIssuanceLifetime
 	}
-
-	csa, err := time.ParseDuration(idvals.Issuer.ClockSkewAllowance)
-	if err != nil {
-		csa = defaultIdentityClockSkewAllowance
+	identityContext := &pb.IdentityContext{
+		TrustDomain:     idvals.TrustDomain,
+		TrustAnchorsPem: idvals.TrustAnchorsPEM,
+		Issuer: &pb.IdentityContext_Issuer{
+			IssuanceLifetime: ptypes.DurationProto(il),
+		},
 	}
 
-	return &pb.IdentityContext{
-		TrustDomain:        idvals.TrustDomain,
-		TrustAnchorsPem:    idvals.TrustAnchorsPEM,
-		IssuanceLifetime:   ptypes.DurationProto(il),
-		ClockSkewAllowance: ptypes.DurationProto(csa),
+	if linkerdIdentityIssuerVals != nil {
+		identityContext.Issuer.IssuerType = charts.LinkerdIdentityIssuerType
+		csa, err := time.ParseDuration(linkerdIdentityIssuerVals.ClockSkewAllowance)
+		if err != nil {
+			csa = defaultIdentityClockSkewAllowance
+		}
+		identityContext.LinkerdIdentityIssuer = &pb.IdentityContext_LinkerdIdentityIssuer{
+			ClockSkewAllowance: ptypes.DurationProto(csa),
+		}
+	} else if awsAcmPcaIdentityIssuerVals != nil {
+		identityContext.Issuer.IssuerType = charts.AwsAcmPcaIdentityIssuerType
+		awsacmpcaContext := &pb.IdentityContext_AwsAcmPcaIdentityIssuer{
+			CaArn:    awsAcmPcaIdentityIssuerVals.CaArn,
+			CaRegion: awsAcmPcaIdentityIssuerVals.CaRegion,
+		}
+		identityContext.AwsacmpcaIdentityIssuer = awsacmpcaContext
 	}
+
+	return identityContext
 }
