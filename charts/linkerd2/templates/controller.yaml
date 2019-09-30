@@ -53,6 +53,7 @@ spec:
         {{.ControllerNamespaceLabel}}: {{.Namespace}}
         {{- include "partials.proxy.labels" .Proxy | nindent 8}}
     spec:
+      {{- include "linkerd.node-selector" . | nindent 6 }}
       {{- if .EnablePodAntiAffinity -}}
       {{- $local := dict "Component" "controller" "Label" .ControllerComponentLabel -}}
       {{- include "linkerd.pod-affinity" $local | nindent 6 -}}
@@ -61,6 +62,7 @@ spec:
       - args:
         - public-api
         - -prometheus-url=http://linkerd-prometheus.{{.Namespace}}.svc.{{.ClusterDomain}}:9090
+        - -destination-addr=linkerd-destination.{{.Namespace}}.svc.{{.ClusterDomain}}:8086
         - -controller-namespace={{.Namespace}}
         - -log-level={{.ControllerLogLevel}}
         image: {{.ControllerImage}}:{{default .LinkerdVersion .ControllerImageVersion}}

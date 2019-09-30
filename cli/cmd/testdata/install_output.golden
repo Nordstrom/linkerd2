@@ -11,6 +11,7 @@ metadata:
     ProxyInjectAnnotation: ProxyInjectDisabled
   labels:
     LinkerdNamespaceLabel: "true"
+    config.linkerd.io/admission-webhooks: disabled
 ---
 ###
 ### Identity Controller Service RBAC
@@ -419,8 +420,10 @@ webhooks:
 - name: linkerd-proxy-injector.linkerd.io
   namespaceSelector:
     matchExpressions:
-    - key: linkerd.io/is-control-plane
-      operator: DoesNotExist
+    - key: config.linkerd.io/admission-webhooks
+      operator: NotIn
+      values:
+      - disabled
   clientConfig:
     service:
       name: linkerd-proxy-injector
@@ -501,6 +504,12 @@ metadata:
     ControllerNamespaceLabel: Namespace
 webhooks:
 - name: linkerd-sp-validator.linkerd.io
+  namespaceSelector:
+    matchExpressions:
+    - key: config.linkerd.io/admission-webhooks
+      operator: NotIn
+      values:
+      - disabled
   clientConfig:
     service:
       name: linkerd-sp-validator
@@ -823,6 +832,8 @@ spec:
         ControllerNamespaceLabel: Namespace
         linkerd.io/proxy-deployment: linkerd-identity
     spec:
+      nodeSelector:
+        null
       containers:
       - args:
         - identity
@@ -1035,10 +1046,13 @@ spec:
         ControllerNamespaceLabel: Namespace
         linkerd.io/proxy-deployment: linkerd-controller
     spec:
+      nodeSelector:
+        null
       containers:
       - args:
         - public-api
         - -prometheus-url=http://linkerd-prometheus.Namespace.svc.cluster.local:9090
+        - -destination-addr=linkerd-destination.Namespace.svc.cluster.local:8086
         - -controller-namespace=Namespace
         - -log-level=ControllerLogLevel
         image: ControllerImage:ControllerImageVersion
@@ -1429,6 +1443,8 @@ spec:
           annotations:
             CreatedByAnnotation: CliVersion
         spec:
+          nodeSelector:
+            null
           serviceAccountName: linkerd-heartbeat
           restartPolicy: Never
           containers:
@@ -1497,6 +1513,8 @@ spec:
         ControllerNamespaceLabel: Namespace
         linkerd.io/proxy-deployment: linkerd-web
     spec:
+      nodeSelector:
+        null
       containers:
       - args:
         - -api-addr=linkerd-controller-api.Namespace.svc.cluster.local:8085
@@ -1822,6 +1840,8 @@ spec:
         ControllerNamespaceLabel: Namespace
         linkerd.io/proxy-deployment: linkerd-prometheus
     spec:
+      nodeSelector:
+        null
       containers:
       - args:
         - --storage.tsdb.path=/data
@@ -2098,6 +2118,8 @@ spec:
         ControllerNamespaceLabel: Namespace
         linkerd.io/proxy-deployment: linkerd-grafana
     spec:
+      nodeSelector:
+        null
       containers:
       - env:
         - name: GF_PATHS_DATA
@@ -2293,6 +2315,8 @@ spec:
         ControllerNamespaceLabel: Namespace
         linkerd.io/proxy-deployment: linkerd-proxy-injector
     spec:
+      nodeSelector:
+        null
       containers:
       - args:
         - proxy-injector
@@ -2523,6 +2547,8 @@ spec:
         ControllerNamespaceLabel: Namespace
         linkerd.io/proxy-deployment: linkerd-sp-validator
     spec:
+      nodeSelector:
+        null
       containers:
       - args:
         - sp-validator
@@ -2734,6 +2760,8 @@ spec:
         ControllerNamespaceLabel: Namespace
         linkerd.io/proxy-deployment: linkerd-tap
     spec:
+      nodeSelector:
+        null
       containers:
       - args:
         - tap

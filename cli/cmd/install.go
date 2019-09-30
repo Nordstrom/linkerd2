@@ -43,6 +43,7 @@ type (
 		highAvailability            bool
 		controllerUID               int64
 		disableH2Upgrade            bool
+		disableHeartbeat            bool
 		noInitContainer             bool
 		skipChecks                  bool
 		omitWebhookSideEffects      bool
@@ -122,6 +123,7 @@ var (
 		"templates/_affinity.tpl",
 		"templates/_config.tpl",
 		"templates/_helpers.tpl",
+		"templates/_nodeselector.tpl",
 		"templates/config.yaml",
 		"templates/identity.yaml",
 		"templates/controller.yaml",
@@ -167,6 +169,7 @@ func newInstallOptionsWithDefaults() (*installOptions, error) {
 		highAvailability:            defaults.HighAvailability,
 		controllerUID:               defaults.ControllerUID,
 		disableH2Upgrade:            !defaults.EnableH2Upgrade,
+		disableHeartbeat:            defaults.DisableHeartBeat,
 		noInitContainer:             defaults.NoInitContainer,
 		omitWebhookSideEffects:      defaults.OmitWebhookSideEffects,
 		restrictDashboardPrivileges: defaults.RestrictDashboardPrivileges,
@@ -434,6 +437,10 @@ func (options *installOptions) recordableFlagSet() *pflag.FlagSet {
 		&options.disableH2Upgrade, "disable-h2-upgrade", options.disableH2Upgrade,
 		"Prevents the controller from instructing proxies to perform transparent HTTP/2 upgrading (default false)",
 	)
+	flags.BoolVar(
+		&options.disableHeartbeat, "disable-heartbeat", options.disableHeartbeat,
+		"Disables the heartbeat cronjob (default false)",
+	)
 	flags.DurationVar(
 		&options.identityOptions.issuanceLifetime, "identity-issuance-lifetime", options.identityOptions.issuanceLifetime,
 		"The amount of time for which the Identity issuer should certify identity",
@@ -631,6 +638,7 @@ func (options *installOptions) buildValuesWithoutIdentity(configs *pb.All) (*cha
 	installValues.PrometheusLogLevel = toPromLogLevel(strings.ToLower(options.controllerLogLevel))
 	installValues.HeartbeatSchedule = options.heartbeatSchedule()
 	installValues.RestrictDashboardPrivileges = options.restrictDashboardPrivileges
+	installValues.DisableHeartBeat = options.disableHeartbeat
 	installValues.UUID = configs.GetInstall().GetUuid()
 	installValues.WebImage = fmt.Sprintf("%s/web", options.dockerRegistry)
 
