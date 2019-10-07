@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/linkerd/linkerd2/controller/gen/config"
 	pb "github.com/linkerd/linkerd2/controller/gen/config"
@@ -41,12 +42,16 @@ func TestRender(t *testing.T) {
 		t.Fatalf("Unexpected error: %v\n", err)
 	}
 
-	identityContext := toIdentityContext(&charts.Identity{
+	identityContext := identityContextFrom(&charts.Identity{
 		Issuer: &charts.Issuer{
-			ClockSkewAllowance: "20s",
-			IssuanceLifetime:   "86400s",
+			IssuanceLifetime: "86400s",
+			IssuerType:       "linkerd",
 		},
-	})
+	},
+		&charts.LinkerdIdentityIssuer{
+			ClockSkewAllowance: "20s",
+		}, nil)
+
 	metaConfig := metaOptions.configs(identityContext)
 	metaConfig.Global.LinkerdNamespace = "Namespace"
 	metaValues := &charts.Values{
@@ -81,11 +86,12 @@ func TestRender(t *testing.T) {
 			Proxy:   "ProxyConfig",
 			Install: "InstallConfig",
 		},
-		ControllerReplicas: 1,
-		Identity:           defaultValues.Identity,
-		ProxyInjector:      defaultValues.ProxyInjector,
-		ProfileValidator:   defaultValues.ProfileValidator,
-		Tap:                defaultValues.Tap,
+		ControllerReplicas:    1,
+		Identity:              defaultValues.Identity,
+		LinkerdIdentityIssuer: defaultValues.LinkerdIdentityIssuer,
+		ProxyInjector:         defaultValues.ProxyInjector,
+		ProfileValidator:      defaultValues.ProfileValidator,
+		Tap:                   defaultValues.Tap,
 		Proxy: &charts.Proxy{
 			Image: &charts.Image{
 				Name:       "ProxyImageName",
@@ -158,11 +164,23 @@ func TestRender(t *testing.T) {
 	noInitContainerValues, noInitContainerConfig, _ := noInitContainerOptions.validateAndBuild("", nil)
 	addFakeTLSSecrets(noInitContainerValues)
 
+	awsacmpcaOptions, _ := testInstallOptions()
+	awsacmpcaOptions.identityOptions.issuerType = "awsacmpca"
+	awsacmpcaOptions.identityOptions.region = "us-west-2"
+	awsacmpcaOptions.identityOptions.arn = "arn:aws:acm-pca:us-west-2:1234:certificate-authority/123-123-123"
+	awsacmpcaOptions.identityOptions.issuanceLifetime = 3 * 24 * time.Hour
+	awsacmpcaValues, awsacmpcaConfig, err := awsacmpcaOptions.validateAndBuild("", nil)
+	addFakeTLSSecrets(awsacmpcaValues)
+	if err != nil {
+		t.Fatalf("Unexpected error validating options: %v", err)
+	}
+
 	testCases := []struct {
 		values         *charts.Values
 		configs        *config.All
 		goldenFileName string
 	}{
+		{awsacmpcaValues, awsacmpcaConfig, "install_control-plane-awsacmpca.golden"},
 		{defaultValues, defaultConfig, "install_default.golden"},
 		{configValues, configConfig, "install_config.golden"},
 		{controlPlaneValues, controlPlaneConfig, "install_control-plane.golden"},
