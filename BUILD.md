@@ -177,6 +177,16 @@ bin/go-run cli check
 
 That is equivalent to running `linkerd check` using the code on your branch.
 
+#### Formatting
+
+All Go source code is formatted with `goimports`. The version of `goimports`
+used by this project is specified in `go.mod`. To ensure you have the same
+version installed, run
+`go install -mod=readonly golang.org/x/tools/cmd/goimports`. It's recommended
+that you set your IDE or other development tools to use `goimports`. Formatting
+is checked during CI by the `bin/fmt` script.
+
+
 #### Building the CLI for development
 
 When Linkerd2's CLI is built using `bin/docker-build` it always creates binaries
@@ -213,11 +223,6 @@ You can send test requests to the destination service using the
 
 ```bash
 bin/go-run controller/script/destination-client -path hello.default.svc.cluster.local:80
-```
-
-You can also send test requests to the destination's discovery interface:
-```bash
-bin/go-run controller/script/discovery-client
 ```
 
 ##### Running the Tap APIService for development
@@ -347,7 +352,6 @@ When Go dependencies change, run the following:
 
 ```bash
 go mod tidy
-bin/build-cli-bin # adds back dependencies specific to `go generate` commands
 bin/update-go-deps-shas
 ```
 

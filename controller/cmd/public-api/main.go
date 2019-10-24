@@ -9,13 +9,13 @@ import (
 	"syscall"
 
 	"github.com/linkerd/linkerd2/controller/api/destination"
-	"github.com/linkerd/linkerd2/controller/api/discovery"
 	"github.com/linkerd/linkerd2/controller/api/public"
 	"github.com/linkerd/linkerd2/controller/k8s"
 	"github.com/linkerd/linkerd2/pkg/admin"
 	"github.com/linkerd/linkerd2/pkg/config"
 	"github.com/linkerd/linkerd2/pkg/flags"
 	pkgK8s "github.com/linkerd/linkerd2/pkg/k8s"
+	"github.com/linkerd/linkerd2/pkg/trace"
 	promApi "github.com/prometheus/client_golang/api"
 	log "github.com/sirupsen/logrus"
 )
@@ -32,16 +32,12 @@ func Main(args []string) {
 	controllerNamespace := cmd.String("controller-namespace", "linkerd", "namespace in which Linkerd is installed")
 	ignoredNamespaces := cmd.String("ignore-namespaces", "kube-system", "comma separated list of namespaces to not list pods from")
 
+	traceCollector := flags.AddTraceFlags(cmd)
+
 	flags.ConfigureAndParse(cmd, args)
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	discoveryClient, discoveryConn, err := discovery.NewClient(*destinationAPIAddr)
-	if err != nil {
-		log.Fatal(err.Error())
-	}
-	defer discoveryConn.Close()
 
 	destinationClient, destinationConn, err := destination.NewClient(*destinationAPIAddr)
 	if err != nil {
@@ -72,10 +68,15 @@ func Main(args []string) {
 	}
 	log.Info("Using cluster domain: ", clusterDomain)
 
+	if *traceCollector != "" {
+		if err := trace.InitializeTracing("linkerd-public-api", *traceCollector); err != nil {
+			log.Warnf("failed to initialize tracing: %s", err)
+		}
+	}
+
 	server := public.NewServer(
 		*addr,
 		prometheusClient,
-		discoveryClient,
 		destinationClient,
 		k8sAPI,
 		*controllerNamespace,

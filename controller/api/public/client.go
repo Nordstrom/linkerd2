@@ -13,11 +13,11 @@ import (
 	destinationPb "github.com/linkerd/linkerd2-proxy-api/go/destination"
 	healthcheckPb "github.com/linkerd/linkerd2/controller/gen/common/healthcheck"
 	configPb "github.com/linkerd/linkerd2/controller/gen/config"
-	discoveryPb "github.com/linkerd/linkerd2/controller/gen/controller/discovery"
 	pb "github.com/linkerd/linkerd2/controller/gen/public"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	"github.com/linkerd/linkerd2/pkg/protohttp"
 	log "github.com/sirupsen/logrus"
+	"go.opencensus.io/plugin/ochttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,14 +31,9 @@ const (
 	apiDeployment = "linkerd-controller"
 )
 
-// APIClient wraps two gRPC client interfaces:
-// 1) public.Api
-// 2) controller/discovery.Discovery
-// This aligns with Public API Server's `handler` struct supporting both gRPC
-// servers.
+// APIClient wraps one gRPC client interface for public.Api:
 type APIClient interface {
 	pb.ApiClient
-	discoveryPb.DiscoveryClient
 	destinationPb.DestinationClient
 }
 
@@ -124,12 +119,6 @@ func (c *grpcOverHTTPClient) GetProfile(ctx context.Context, _ *destinationPb.Ge
 	return nil, errors.New("Not implemented")
 }
 
-func (c *grpcOverHTTPClient) Endpoints(ctx context.Context, req *discoveryPb.EndpointsParams, _ ...grpc.CallOption) (*discoveryPb.EndpointsResponse, error) {
-	var msg discoveryPb.EndpointsResponse
-	err := c.apiRequest(ctx, "Endpoints", req, &msg)
-	return &msg, err
-}
-
 func (c *grpcOverHTTPClient) apiRequest(ctx context.Context, endpoint string, req proto.Message, protoResponse proto.Message) error {
 	url := c.endpointNameToPublicAPIURL(endpoint)
 
@@ -212,7 +201,7 @@ func NewInternalClient(controlPlaneNamespace string, kubeAPIHost string) (APICli
 		return nil, err
 	}
 
-	return newClient(apiURL, http.DefaultClient, controlPlaneNamespace)
+	return newClient(apiURL, &http.Client{Transport: &ochttp.Transport{}}, controlPlaneNamespace)
 }
 
 // NewExternalClient creates a new Public API client intended to run from

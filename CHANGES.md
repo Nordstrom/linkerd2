@@ -1,3 +1,30 @@
+## edge-19.10.4
+
+This edge release adds dashboard UX enhancements, and improves the speed of the CLI.
+
+* CLI
+  * Made `linkerd install --ignore-cluster` and `--skip-checks` faster
+  * Fixed a bug causing `linkerd upgrade` to fail when used with 
+  `--from-manifest`
+* Web UI
+  * Made the dashboard sidebar component responsive
+  * Changed the navigation bar color to the one used on the [Linkerd](https://linkerd.io/) website
+
+## edge-19.10.3
+
+This edge release adds support for headless services, improves the upgrade
+process after installing Linkerd with a custom cluster domain, and enhances
+the `check` functionality to report invalid trust anchors.
+
+* CLI
+  * Made `--cluster-domain` an install-only flag (thanks @bmcstdio!)
+  * Updated `check` to ensure that proxy trust anchors match configuration
+       (thanks @ereslibre!)
+* Controller
+  * Added support for headless services (thanks @JohannesEH!)
+* Helm
+  * Updated the helm build to retain previous releases
+
 ## stable-2.6.0
 
 This release introduces distributed tracing support, adds request and response
