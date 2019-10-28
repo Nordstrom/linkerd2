@@ -436,7 +436,7 @@ webhooks:
       namespace: linkerd
       path: "/"
     caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURKakNDQWc2Z0F3SUJBZ0lRVjFrSXJhRG1sdzNTVzY5UXNRWjNQREFOQmdrcWhraUc5dzBCQVFzRkFEQXQKTVNzd0tRWURWUVFERXlKc2FXNXJaWEprTFhCeWIzaDVMV2x1YW1WamRHOXlMbXhwYm10bGNtUXVjM1pqTUI0WApEVEU1TURnd056SXhNelkwTUZvWERUSXdNRGd3TmpJeE16WTBNRm93TFRFck1Da0dBMVVFQXhNaWJHbHVhMlZ5ClpDMXdjbTk0ZVMxcGJtcGxZM1J2Y2k1c2FXNXJaWEprTG5OMll6Q0NBU0l3RFFZSktvWklodmNOQVFFQkJRQUQKZ2dFUEFEQ0NBUW9DZ2dFQkFOek5iMmd0VVU2SmsxVDV4Smx3dTNlSmViSml4T01Vc3QyMzVkSWJXU1F2OUlNagpXRTR1Z3dlbk1ZSDh5V1ppV1F5NCsya0h3c1JkdWNxM3lqZUIrMmFsUll6enBLcFUvdHVxVi9XT2U3VVpxcGRaCkNsNTUzNXlmUzMzNndadjFrWlRlU3g1dHc0d3YwaU9vVG9jVGlsSm1tOGVsWDJUN0toajJVam5oSDNWUXFxbjEKcERRUGIvalRMOVcySlZYL2luOXdvTEptc294aFNkR2MxTDRsVnlvWEFOSVdSWENwQVYzVlo5MXV6SHFqaWYyZgpyWnBaRTQ0QWtaM1hWRnVlaldtcTZURWxHL1M1YnBkaExDcy8zWE41T1lZUXVYbXlTdHEyb055ZzFUOEx6RmxECmJ6eXZBSldmSXV6d3hZa051NTljbkhaUjBRY2liUDF5NTQ0QlV2c0NBd0VBQWFOQ01FQXdEZ1lEVlIwUEFRSC8KQkFRREFnS2tNQjBHQTFVZEpRUVdNQlFHQ0NzR0FRVUZCd01CQmdnckJnRUZCUWNEQWpBUEJnTlZIUk1CQWY4RQpCVEFEQVFIL01BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQjBNZERONWRuaUgxYS96UGI5QWFBT2JqaFBEUC9FCngreVlRU3VDYXpyeFZCUlpPeGdpUkUyN1JjZ05BRGZmOVRkRU9ER1BrUVY4aTRnVVVOdi9VanljODYxdW55SG0KR3FacEp0OFROZ0pWN2VHR00wUWlrNkFYZTdLT1N0aFdzVVZDSHlGMUFyam01U2dRUHRsREttVGk1bDBCZ1pyKwpBblVzOVllNHhUSFFFYSswSFN3NXNjdnFsVDhYS0ZCanoza2hJbHFVd3IvSy9seVZITDcwQTMyUi9UODh5Z1YzClQ4MitwS1R5T3lZU1IrZG1ZUWdxcW00ajVhVVp5aURPZVFHR1kycEZNQnJMY0tGZjFqcmJHWXlVQVNrdlh6NXoKaHZIOUtJWXFOckdhMDloTFBjb00rMW9CNHNnY2RKdFpCV2pCRWdiTHdwWEJJdUVFVXY5cno0dDAKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQ==
-  failurePolicy: Fail
+  failurePolicy: Ignore
   rules:
   - operations: [ "CREATE" ]
     apiGroups: [""]
@@ -522,7 +522,7 @@ webhooks:
       namespace: linkerd
       path: "/"
     caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURJakNDQWdxZ0F3SUJBZ0lRQkhsRWhOb3Y0Z1hHT0EzbGFOamErekFOQmdrcWhraUc5dzBCQVFzRkFEQXIKTVNrd0p3WURWUVFERXlCc2FXNXJaWEprTFhOd0xYWmhiR2xrWVhSdmNpNXNhVzVyWlhKa0xuTjJZekFlRncweApPVEE0TURjeU1UTTJOREJhRncweU1EQTRNRFl5TVRNMk5EQmFNQ3N4S1RBbkJnTlZCQU1USUd4cGJtdGxjbVF0CmMzQXRkbUZzYVdSaGRHOXlMbXhwYm10bGNtUXVjM1pqTUlJQklqQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FROEEKTUlJQkNnS0NBUUVBdklFVW5YdlBkSDFra2lJM2JPc01wQ0Zpb3FoN0dCK1ZtSmE5Q2RoNEQ3bWhiMWhoMUNYdgpNblZtQVduUE9UYWRvUHRZNFNZZU9pUDBURVQ1enZ1MUlEUzVyZFhUcDlZaHZHWDRMM1NhVk5XdnlsbzNXT1FmCk5sSXZPWFU4bHZHaDAyeE9TK3RZeklSMVh0dmFhOUV6K1QyN0p4ei9meHhnK2tHRmRES3BBK0tQeitvZHRKL1YKYTYvc2N6UWhaczhtTWt3L0Y3MzJxS1JtWG83bm9pTjhYRjAxSFBiT1pVdFpGZjJ6L2hGMHhKaEVMNlRNWTNlNwpZNnZ4UFoyMGVobTR5cUk1Q2RqcWN1WFNwL0xhbFNJOTBsb0ZMMU5SZFRuREgzZ1BNUWM3VE9KenIzQUI0bmxjCmJIU0ZsNkFvN2J1U3EvOTJ4MmdwMjRRT2w0UURkdlVZaVFJREFRQUJvMEl3UURBT0JnTlZIUThCQWY4RUJBTUMKQXFRd0hRWURWUjBsQkJZd0ZBWUlLd1lCQlFVSEF3RUdDQ3NHQVFVRkJ3TUNNQThHQTFVZEV3RUIvd1FGTUFNQgpBZjh3RFFZSktvWklodmNOQVFFTEJRQURnZ0VCQUtJQUc5T2E4SndtSzBUaGVtc2RxdjhvdkhZUk5XTHBWOVBhCkJNejJhQklFQVlvMURxQmFaQWFkdWZKa0k1bmFoTC81K2NaQXp3M2s4RmpYN2plT1ErYmlPaS9TNlU4K0FNZEUKZnZvdVR5N05Kb0xXM1NUclhCcjJnYzY3RUtLQ2JGQmsxYzM3b21KSUhhZU15aWNkRHY0SHRYTExDcUtrYk54aAo0NGQ2YUpzL3lNZm9kZGFhZFN0L1RwMGZtaHNPMTR5OUp3RDFWL2s1M3ppUmxDcXNYVUtBK05vejhqRC8wVkI5CnFyd0dpWGk4S1ZsZS9LYjFDZktOM1VhczdBRHlxbVVEUGNKY2tQMGM5QnBRQzlLYTJqZHhzb0hvWi8vSG5SVGYKalc2dExlcjN1UHZpek5qM2swcWt2SVAydVVJNDg0MkJjQmUrbVB1NlJoeVozdWt4elNVPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0t
-  failurePolicy: Fail
+  failurePolicy: Ignore
   rules:
   - operations: [ "CREATE" , "UPDATE" ]
     apiGroups: ["linkerd.io"]
@@ -766,30 +766,16 @@ metadata:
     linkerd.io/created-by: linkerd/cli dev-undefined
 data:
   global: |
-    {"linkerdNamespace":"linkerd","cniEnabled":false,"version":"UPGRADE-CONTROL-PLANE-VERSION","identityContext":{"trustDomain":"cluster.local","trustAnchorsPem":"-----BEGIN CERTIFICATE-----\nMIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0\neS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz\nMjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j\nYWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg\nEMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw\nQDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC\nMA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW\nYmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj\n+U9K4WlbzA==\n-----END CERTIFICATE-----\n","issuanceLifetime":"86400s","clockSkewAllowance":"20s","scheme":"linkerd.io/tls"},"autoInjectContext":null,"omitWebhookSideEffects":false,"clusterDomain":"cluster.local"}
+    {"linkerdNamespace":"linkerd","cniEnabled":false,"version":"UPGRADE-CONTROL-PLANE-VERSION","identityContext":{"trustDomain":"cluster.local","trustAnchorsPem":"-----BEGIN CERTIFICATE-----\nMIIBgzCCASmgAwIBAgIBATAKBggqhkjOPQQDAjApMScwJQYDVQQDEx5pZGVudGl0\neS5saW5rZXJkLmNsdXN0ZXIubG9jYWwwHhcNMTkwNDA0MjM1MzM3WhcNMjAwNDAz\nMjM1MzU3WjApMScwJQYDVQQDEx5pZGVudGl0eS5saW5rZXJkLmNsdXN0ZXIubG9j\nYWwwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT+Sb5X4wi4XP0X3rJwMp23VBdg\nEMMU8EU+KG8UI2LmC5Vjg5RWLOW6BJjBmjXViKM+b+1/oKAeOg6FrJk8qyFlo0Iw\nQDAOBgNVHQ8BAf8EBAMCAQYwHQYDVR0lBBYwFAYIKwYBBQUHAwEGCCsGAQUFBwMC\nMA8GA1UdEwEB/wQFMAMBAf8wCgYIKoZIzj0EAwIDSAAwRQIhAKUFG3sYOS++bakW\nYmJZU45iCdTLtaelMDSFiHoC9eBKAiBDWzzo+/CYLLmn33bAEn8pQnogP4Fx06aj\n+U9K4WlbzA==\n-----END CERTIFICATE-----\n","issuanceLifetime":"86400s","clockSkewAllowance":"20s","scheme":"kubernetes.io/tls"},"autoInjectContext":null,"omitWebhookSideEffects":false,"clusterDomain":"cluster.local"}
   proxy: |
-    {"proxyImage":{"imageName":"gcr.io/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"gcr.io/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"100m","requestMemory":"20Mi","limitCpu":"1","limitMemory":"250Mi"},"proxyUid":"2102","logLevel":{"level":"warn,linkerd2_proxy=info"},"disableExternalProfiles":true,"proxyVersion":"UPGRADE-PROXY-VERSION","proxyInitImageVersion":"v1.2.0"}
+    {"proxyImage":{"imageName":"gcr.io/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"gcr.io/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"","requestMemory":"","limitCpu":"","limitMemory":""},"proxyUid":"2102","logLevel":{"level":"warn,linkerd2_proxy=info"},"disableExternalProfiles":true,"proxyVersion":"UPGRADE-PROXY-VERSION","proxyInitImageVersion":"v1.2.0"}
   install: |
-    {"uuid":"57af298c-58b0-43fc-8d88-3c338789bfbc","cliVersion":"dev-undefined","flags":[{"name":"ha","value":"true"}]}
+    {"uuid":"57af298c-58b0-43fc-8d88-3c338789bfbc","cliVersion":"dev-undefined","flags":[]}
 ---
 ###
 ### Identity Controller Service
 ###
----
-kind: Secret
-apiVersion: v1
-metadata:
-  name: linkerd-identity-issuer
-  namespace: linkerd
-  labels:
-    linkerd.io/control-plane-component: identity
-    linkerd.io/control-plane-ns: linkerd
-  annotations:
-    linkerd.io/created-by: linkerd/cli dev-undefined
-    linkerd.io/identity-issuer-expiry: 2020-04-03T23:53:57Z
-data:
-  crt.pem: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJnekNDQVNtZ0F3SUJBZ0lCQVRBS0JnZ3Foa2pPUFFRREFqQXBNU2N3SlFZRFZRUURFeDVwWkdWdWRHbDAKZVM1c2FXNXJaWEprTG1Oc2RYTjBaWEl1Ykc5allXd3dIaGNOTVRrd05EQTBNak0xTXpNM1doY05NakF3TkRBegpNak0xTXpVM1dqQXBNU2N3SlFZRFZRUURFeDVwWkdWdWRHbDBlUzVzYVc1clpYSmtMbU5zZFhOMFpYSXViRzlqCllXd3dXVEFUQmdjcWhrak9QUUlCQmdncWhrak9QUU1CQndOQ0FBVCtTYjVYNHdpNFhQMFgzckp3TXAyM1ZCZGcKRU1NVThFVStLRzhVSTJMbUM1VmpnNVJXTE9XNkJKakJtalhWaUtNK2IrMS9vS0FlT2c2RnJKazhxeUZsbzBJdwpRREFPQmdOVkhROEJBZjhFQkFNQ0FRWXdIUVlEVlIwbEJCWXdGQVlJS3dZQkJRVUhBd0VHQ0NzR0FRVUZCd01DCk1BOEdBMVVkRXdFQi93UUZNQU1CQWY4d0NnWUlLb1pJemowRUF3SURTQUF3UlFJaEFLVUZHM3NZT1MrK2Jha1cKWW1KWlU0NWlDZFRMdGFlbE1EU0ZpSG9DOWVCS0FpQkRXenpvKy9DWUxMbW4zM2JBRW44cFFub2dQNEZ4MDZhagorVTlLNFdsYnpBPT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQ==
-  key.pem: LS0tLS1CRUdJTiBFQyBQUklWQVRFIEtFWS0tLS0tCk1IY0NBUUVFSUhaaEFWTnNwSlRzMWZ4YmZ4VmptTTJvMTNTOFd4U2VVdTlrNFhZK0NPY3JvQW9HQ0NxR1NNNDkKQXdFSG9VUURRZ0FFL2ttK1YrTUl1Rno5Rjk2eWNES2R0MVFYWUJEREZQQkZQaWh2RkNOaTVndVZZNE9VVml6bAp1Z1NZd1pvMTFZaWpQbS90ZjZDZ0hqb09oYXlaUEtzaFpRPT0KLS0tLS1FTkQgRUMgUFJJVkFURSBLRVktLS0tLQ==
+
 ---
 kind: Service
 apiVersion: v1
@@ -821,7 +807,7 @@ metadata:
   name: linkerd-identity
   namespace: linkerd
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       linkerd.io/control-plane-component: identity
@@ -840,26 +826,6 @@ spec:
     spec:
       nodeSelector:
         beta.kubernetes.io/os: linux
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: linkerd.io/control-plane-component
-                  operator: In
-                  values:
-                  - identity
-              topologyKey: failure-domain.beta.kubernetes.io/zone
-            weight: 100
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: linkerd.io/control-plane-component
-                operator: In
-                values:
-                - identity
-            topologyKey: kubernetes.io/hostname
       containers:
       - args:
         - identity
@@ -882,13 +848,6 @@ spec:
           httpGet:
             path: /ready
             port: 9990
-        resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "10Mi"
         securityContext:
           runAsUser: 2103
         volumeMounts:
@@ -977,12 +936,6 @@ spec:
             port: 4191
           initialDelaySeconds: 2
         resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "20Mi"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -1089,7 +1042,7 @@ metadata:
   name: linkerd-controller
   namespace: linkerd
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       linkerd.io/control-plane-component: controller
@@ -1108,26 +1061,6 @@ spec:
     spec:
       nodeSelector:
         beta.kubernetes.io/os: linux
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: linkerd.io/control-plane-component
-                  operator: In
-                  values:
-                  - controller
-              topologyKey: failure-domain.beta.kubernetes.io/zone
-            weight: 100
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: linkerd.io/control-plane-component
-                operator: In
-                values:
-                - controller
-            topologyKey: kubernetes.io/hostname
       containers:
       - args:
         - public-api
@@ -1153,13 +1086,6 @@ spec:
           httpGet:
             path: /ready
             port: 9995
-        resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
         securityContext:
           runAsUser: 2103
         volumeMounts:
@@ -1189,13 +1115,6 @@ spec:
           httpGet:
             path: /ready
             port: 9996
-        resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
         securityContext:
           runAsUser: 2103
         volumeMounts:
@@ -1282,12 +1201,6 @@ spec:
             port: 4191
           initialDelaySeconds: 2
         resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "20Mi"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -1372,7 +1285,7 @@ metadata:
   name: linkerd-destination
   namespace: linkerd
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       linkerd.io/control-plane-component: destination
@@ -1391,26 +1304,6 @@ spec:
     spec:
       nodeSelector:
         beta.kubernetes.io/os: linux
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: linkerd.io/control-plane-component
-                  operator: In
-                  values:
-                  - destination
-              topologyKey: failure-domain.beta.kubernetes.io/zone
-            weight: 100
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: linkerd.io/control-plane-component
-                operator: In
-                values:
-                - destination
-            topologyKey: kubernetes.io/hostname
       containers:
       - args:
         - destination
@@ -1436,13 +1329,6 @@ spec:
           httpGet:
             path: /ready
             port: 9996
-        resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
         securityContext:
           runAsUser: 2103
         volumeMounts:
@@ -1529,12 +1415,6 @@ spec:
             port: 4191
           initialDelaySeconds: 2
         resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "20Mi"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -1624,13 +1504,6 @@ spec:
             - "-prometheus-url=http://linkerd-prometheus.linkerd.svc.cluster.local:9090"
             - "-controller-namespace=linkerd"
             - "-log-level=info"
-            resources:
-              limits:
-                cpu: "1"
-                memory: "250Mi"
-              requests:
-                cpu: "100m"
-                memory: "50Mi"
             securityContext:
               runAsUser: 2103
 ---
@@ -1714,13 +1587,6 @@ spec:
           httpGet:
             path: /ready
             port: 9994
-        resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
         securityContext:
           runAsUser: 2103
         volumeMounts:
@@ -1807,12 +1673,6 @@ spec:
             port: 4191
           initialDelaySeconds: 2
         resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "20Mi"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -2056,13 +1916,6 @@ spec:
             port: 9090
           initialDelaySeconds: 30
           timeoutSeconds: 30
-        resources:
-          limits:
-            cpu: "4"
-            memory: "8192Mi"
-          requests:
-            cpu: "300m"
-            memory: "300Mi"
         securityContext:
           runAsUser: 65534
         volumeMounts:
@@ -2154,12 +2007,6 @@ spec:
             port: 4191
           initialDelaySeconds: 2
         resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "20Mi"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -2344,13 +2191,6 @@ spec:
           httpGet:
             path: /api/health
             port: 3000
-        resources:
-          limits:
-            cpu: "1"
-            memory: "1024Mi"
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
         securityContext:
           runAsUser: 472
         volumeMounts:
@@ -2440,12 +2280,6 @@ spec:
             port: 4191
           initialDelaySeconds: 2
         resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "20Mi"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -2520,7 +2354,7 @@ metadata:
   name: linkerd-proxy-injector
   namespace: linkerd
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       linkerd.io/control-plane-component: proxy-injector
@@ -2537,26 +2371,6 @@ spec:
     spec:
       nodeSelector:
         beta.kubernetes.io/os: linux
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: linkerd.io/control-plane-component
-                  operator: In
-                  values:
-                  - proxy-injector
-              topologyKey: failure-domain.beta.kubernetes.io/zone
-            weight: 100
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: linkerd.io/control-plane-component
-                operator: In
-                values:
-                - proxy-injector
-            topologyKey: kubernetes.io/hostname
       containers:
       - args:
         - proxy-injector
@@ -2579,13 +2393,6 @@ spec:
           httpGet:
             path: /ready
             port: 9995
-        resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
         securityContext:
           runAsUser: 2103
         volumeMounts:
@@ -2675,12 +2482,6 @@ spec:
             port: 4191
           initialDelaySeconds: 2
         resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "20Mi"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -2787,7 +2588,7 @@ metadata:
   name: linkerd-sp-validator
   namespace: linkerd
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       linkerd.io/control-plane-component: sp-validator
@@ -2804,26 +2605,6 @@ spec:
     spec:
       nodeSelector:
         beta.kubernetes.io/os: linux
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: linkerd.io/control-plane-component
-                  operator: In
-                  values:
-                  - sp-validator
-              topologyKey: failure-domain.beta.kubernetes.io/zone
-            weight: 100
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: linkerd.io/control-plane-component
-                operator: In
-                values:
-                - sp-validator
-            topologyKey: kubernetes.io/hostname
       containers:
       - args:
         - sp-validator
@@ -2846,13 +2627,6 @@ spec:
           httpGet:
             path: /ready
             port: 9997
-        resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
         securityContext:
           runAsUser: 2103
         volumeMounts:
@@ -2940,12 +2714,6 @@ spec:
             port: 4191
           initialDelaySeconds: 2
         resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "20Mi"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -3033,7 +2801,7 @@ metadata:
   name: linkerd-tap
   namespace: linkerd
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       linkerd.io/control-plane-component: tap
@@ -3052,26 +2820,6 @@ spec:
     spec:
       nodeSelector:
         beta.kubernetes.io/os: linux
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: linkerd.io/control-plane-component
-                  operator: In
-                  values:
-                  - tap
-              topologyKey: failure-domain.beta.kubernetes.io/zone
-            weight: 100
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: linkerd.io/control-plane-component
-                operator: In
-                values:
-                - tap
-            topologyKey: kubernetes.io/hostname
       containers:
       - args:
         - tap
@@ -3097,13 +2845,6 @@ spec:
           httpGet:
             path: /ready
             port: 9998
-        resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "50Mi"
         securityContext:
           runAsUser: 2103
         volumeMounts:
@@ -3193,12 +2934,6 @@ spec:
             port: 4191
           initialDelaySeconds: 2
         resources:
-          limits:
-            cpu: "1"
-            memory: "250Mi"
-          requests:
-            cpu: "100m"
-            memory: "20Mi"
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true

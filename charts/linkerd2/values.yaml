@@ -22,6 +22,8 @@ ControllerUID: 2103
 # identity configuration
 Identity:
   Issuer:
+    Scheme: linkerd.io/tls
+
     ClockSkewAllowance: 20s
 
     # must match the expiry date in CrtPEM
@@ -53,6 +55,9 @@ HeartbeatSchedule: "0 0 * * *"
 # prometheus configuration
 PrometheusImage: prom/prometheus:v2.11.1
 PrometheusLogLevel: *controller_log_level
+
+# Control Plane Trace Configuration
+ControlPlaneTracing: false
 
 # proxy configuration
 Proxy:
