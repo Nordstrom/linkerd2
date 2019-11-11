@@ -21,6 +21,7 @@ type TestHelper struct {
 	version            string
 	namespace          string
 	upgradeFromVersion string
+	clusterDomain      string
 	httpClient         http.Client
 	KubernetesHelper
 	helm
@@ -49,6 +50,7 @@ func NewTestHelper() *TestHelper {
 	helmReleaseName := flag.String("helm-release", "", "install linkerd via Helm using this release name")
 	tillerNs := flag.String("tiller-ns", "kube-system", "namespace under which Tiller will be installed")
 	upgradeFromVersion := flag.String("upgrade-from-version", "", "when specified, the upgrade test uses it as the base version of the upgrade")
+	clusterDomain := flag.String("cluster-domain", "", "when specified, the install test uses a custom cluster domain")
 	runTests := flag.Bool("integration-tests", false, "must be provided to run the integration tests")
 	verbose := flag.Bool("verbose", false, "turn on debug logging")
 	flag.Parse()
@@ -86,6 +88,7 @@ func NewTestHelper() *TestHelper {
 			releaseName: *helmReleaseName,
 			tillerNs:    *tillerNs,
 		},
+		clusterDomain: *clusterDomain,
 	}
 
 	version, _, err := testHelper.LinkerdRun("version", "--client", "--short")
@@ -134,6 +137,11 @@ func (h *TestHelper) GetHelmReleaseName() string {
 // UpgradeFromVersion returns the base version of the upgrade test.
 func (h *TestHelper) UpgradeFromVersion() string {
 	return h.upgradeFromVersion
+}
+
+// GetClusterDomain returns the custom cluster domain that needs to be used during linkerd installation
+func (h *TestHelper) GetClusterDomain() string {
+	return h.clusterDomain
 }
 
 // LinkerdRun executes a linkerd command appended with the --linkerd-namespace
@@ -291,4 +299,78 @@ func combinedOutput(stdin string, name string, arg ...string) (string, string, e
 
 	stdout, err := command.Output()
 	return string(stdout), stderr.String(), err
+}
+
+// RowStat is used to store the contents for a single row from the stat command
+type RowStat struct {
+	Name               string
+	Status             string
+	Meshed             string
+	Success            string
+	Rps                string
+	P50Latency         string
+	P95Latency         string
+	P99Latency         string
+	TCPOpenConnections string
+}
+
+// check that expectedRowCount rows have been returned
+func checkRowCount(out string, expectedRowCount int) ([]string, error) {
+	rows := strings.Split(out, "\n")
+	if len(rows) < 2 {
+		return nil, fmt.Errorf(
+			"Error stripping header and trailing newline; full output:\n%s",
+			strings.Join(rows, "\n"),
+		)
+	}
+	rows = rows[1 : len(rows)-1] // strip header and trailing newline
+
+	if len(rows) != expectedRowCount {
+		return nil, fmt.Errorf(
+			"Expected [%d] rows in stat output, got [%d]; full output:\n%s",
+			expectedRowCount, len(rows), strings.Join(rows, "\n"))
+	}
+
+	return rows, nil
+}
+
+// ParseRows parses the output of linkerd stat into a map of resource names to RowStat objects
+func ParseRows(out string, expectedRowCount, expectedColumnCount int) (map[string]*RowStat, error) {
+	rows, err := checkRowCount(out, expectedRowCount)
+	if err != nil {
+		return nil, err
+	}
+
+	rowStats := make(map[string]*RowStat)
+	for _, row := range rows {
+		fields := strings.Fields(row)
+
+		if expectedColumnCount == 0 {
+			expectedColumnCount = 8
+		}
+		if len(fields) != expectedColumnCount {
+			return nil, fmt.Errorf(
+				"Expected [%d] columns in stat output, got [%d]; full output:\n%s",
+				expectedColumnCount, len(fields), row)
+		}
+
+		rowStats[fields[0]] = &RowStat{
+			Name: fields[0],
+		}
+
+		i := 0
+		if expectedColumnCount == 9 {
+			rowStats[fields[0]].Status = fields[1]
+			i = 1
+		}
+		rowStats[fields[0]].Meshed = fields[1+i]
+		rowStats[fields[0]].Success = fields[2+i]
+		rowStats[fields[0]].Rps = fields[3+i]
+		rowStats[fields[0]].P50Latency = fields[4+i]
+		rowStats[fields[0]].P95Latency = fields[5+i]
+		rowStats[fields[0]].P99Latency = fields[6+i]
+		rowStats[fields[0]].TCPOpenConnections = fields[7+i]
+	}
+
+	return rowStats, nil
 }

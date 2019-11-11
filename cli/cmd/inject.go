@@ -148,6 +148,11 @@ func (rt resourceTransformerInject) transform(bytes []byte) ([]byte, []inject.Re
 	if err != nil {
 		return nil, nil, err
 	}
+
+	if conf.IsControlPlaneComponent() && !rt.injectProxy {
+		return nil, nil, errors.New("--manual must be set when injecting control plane components")
+	}
+
 	reports := []inject.Report{*report}
 
 	if rt.allowNsInject && conf.IsNamespace() {
@@ -428,11 +433,11 @@ func (options *proxyConfigOptions) overrideConfigs(configs *cfg.All, overrideAnn
 	}
 
 	if options.traceCollector != "" {
-		overrideAnnotations[k8s.ProxyTraceCollectorSvcAddr] = options.traceCollector
+		overrideAnnotations[k8s.ProxyTraceCollectorSvcAddrAnnotation] = options.traceCollector
 	}
 
 	if options.traceCollectorSvcAccount != "" {
-		overrideAnnotations[k8s.ProxyTraceCollectorSvcAccount] = options.traceCollectorSvcAccount
+		overrideAnnotations[k8s.ProxyTraceCollectorSvcAccountAnnotation] = options.traceCollectorSvcAccount
 	}
 }
 

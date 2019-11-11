@@ -35,7 +35,7 @@ func TestMain(m *testing.M) {
 var (
 	linkerdSvcs = []string{
 		"linkerd-controller-api",
-		"linkerd-destination",
+		"linkerd-dst",
 		"linkerd-grafana",
 		"linkerd-identity",
 		"linkerd-prometheus",
@@ -151,6 +151,42 @@ func TestCheckPreInstall(t *testing.T) {
 	}
 }
 
+func exerciseTestAppEndpoint(endpoint, namespace string) error {
+	testAppURL, err := TestHelper.URLFor(namespace, "web", 8080)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < 30; i++ {
+		_, err := TestHelper.HTTPGetURL(testAppURL + endpoint)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestUpgradeTestAppWorksBeforeUpgrade(t *testing.T) {
+	if TestHelper.UpgradeFromVersion() != "" {
+		// make sure app is running
+		testAppNamespace := TestHelper.GetTestNamespace("upgrade-test")
+		for _, deploy := range []string{"emoji", "voting", "web"} {
+			if err := TestHelper.CheckPods(testAppNamespace, deploy, 1); err != nil {
+				t.Error(err)
+			}
+
+			if err := TestHelper.CheckDeployment(testAppNamespace, deploy, 1); err != nil {
+				t.Error(fmt.Errorf("Error validating deployment [%s]:\n%s", deploy, err))
+			}
+		}
+
+		if err := exerciseTestAppEndpoint("/api/list", testAppNamespace); err != nil {
+			t.Fatalf("Error exercising test app endpoint before upgrade %s", err)
+		}
+	} else {
+		t.Skip("Skipping for non upgrade test")
+	}
+}
+
 func TestInstallOrUpgradeCli(t *testing.T) {
 	if TestHelper.GetHelmReleaseName() != "" {
 		return
@@ -165,9 +201,13 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 		}
 	)
 
-	if TestHelper.UpgradeFromVersion() != "" {
-		cmd = "upgrade"
+	if TestHelper.GetClusterDomain() != "" {
+		args = append(args, "--cluster-domain", TestHelper.GetClusterDomain())
+	}
 
+	if TestHelper.UpgradeFromVersion() != "" {
+
+		cmd = "upgrade"
 		// test 2-stage install during upgrade
 		out, _, err := TestHelper.LinkerdRun(cmd, "config")
 		if err != nil {
@@ -224,6 +264,7 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 	if err != nil {
 		t.Fatalf("kubectl apply command failed\n%s", out)
 	}
+
 }
 
 func TestInstallHelm(t *testing.T) {
@@ -328,6 +369,16 @@ func TestCheckPostInstall(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err.Error())
+	}
+}
+func TestUpgradeTestAppWorksAfterUpgrade(t *testing.T) {
+	if TestHelper.UpgradeFromVersion() != "" {
+		testAppNamespace := TestHelper.GetTestNamespace("upgrade-test")
+		if err := exerciseTestAppEndpoint("/api/vote?choice=:policeman:", testAppNamespace); err != nil {
+			t.Fatalf("Error exercising test app endpoint after upgrade %s", err)
+		}
+	} else {
+		t.Skip("Skipping for non upgrade test")
 	}
 }
 
