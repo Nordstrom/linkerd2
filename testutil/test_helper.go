@@ -2,6 +2,8 @@ package testutil
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -13,6 +15,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	corev1 "k8s.io/api/core/v1"
 )
 
 // TestHelper provides helpers for running the linkerd integration tests.
@@ -22,6 +25,7 @@ type TestHelper struct {
 	namespace          string
 	upgradeFromVersion string
 	clusterDomain      string
+	externalIssuer     bool
 	httpClient         http.Client
 	KubernetesHelper
 	helm
@@ -51,6 +55,7 @@ func NewTestHelper() *TestHelper {
 	tillerNs := flag.String("tiller-ns", "kube-system", "namespace under which Tiller will be installed")
 	upgradeFromVersion := flag.String("upgrade-from-version", "", "when specified, the upgrade test uses it as the base version of the upgrade")
 	clusterDomain := flag.String("cluster-domain", "", "when specified, the install test uses a custom cluster domain")
+	externalIssuer := flag.Bool("external-issuer", false, "when specified, the install test uses it to install linkerd with --identity-external-issuer=true")
 	runTests := flag.Bool("integration-tests", false, "must be provided to run the integration tests")
 	verbose := flag.Bool("verbose", false, "turn on debug logging")
 	flag.Parse()
@@ -88,7 +93,8 @@ func NewTestHelper() *TestHelper {
 			releaseName: *helmReleaseName,
 			tillerNs:    *tillerNs,
 		},
-		clusterDomain: *clusterDomain,
+		clusterDomain:  *clusterDomain,
+		externalIssuer: *externalIssuer,
 	}
 
 	version, _, err := testHelper.LinkerdRun("version", "--client", "--short")
@@ -132,6 +138,11 @@ func (h *TestHelper) GetTestNamespace(testName string) string {
 // GetHelmReleaseName returns the name of the Linkerd installation Helm release
 func (h *TestHelper) GetHelmReleaseName() string {
 	return h.helm.releaseName
+}
+
+// ExternalIssuer determines whether linkerd should be installed with --identity-external-issuer
+func (h *TestHelper) ExternalIssuer() bool {
+	return h.externalIssuer
 }
 
 // UpgradeFromVersion returns the base version of the upgrade test.
@@ -314,8 +325,9 @@ type RowStat struct {
 	TCPOpenConnections string
 }
 
-// check that expectedRowCount rows have been returned
-func checkRowCount(out string, expectedRowCount int) ([]string, error) {
+// CheckRowCount checks that expectedRowCount rows have been returned
+func CheckRowCount(out string, expectedRowCount int) ([]string, error) {
+	out = strings.TrimSuffix(out, "\n")
 	rows := strings.Split(out, "\n")
 	if len(rows) < 2 {
 		return nil, fmt.Errorf(
@@ -323,8 +335,7 @@ func checkRowCount(out string, expectedRowCount int) ([]string, error) {
 			strings.Join(rows, "\n"),
 		)
 	}
-	rows = rows[1 : len(rows)-1] // strip header and trailing newline
-
+	rows = rows[1:] // strip header
 	if len(rows) != expectedRowCount {
 		return nil, fmt.Errorf(
 			"Expected [%d] rows in stat output, got [%d]; full output:\n%s",
@@ -336,7 +347,7 @@ func checkRowCount(out string, expectedRowCount int) ([]string, error) {
 
 // ParseRows parses the output of linkerd stat into a map of resource names to RowStat objects
 func ParseRows(out string, expectedRowCount, expectedColumnCount int) (map[string]*RowStat, error) {
-	rows, err := checkRowCount(out, expectedRowCount)
+	rows, err := CheckRowCount(out, expectedRowCount)
 	if err != nil {
 		return nil, err
 	}
@@ -373,4 +384,27 @@ func ParseRows(out string, expectedRowCount, expectedColumnCount int) (map[strin
 	}
 
 	return rowStats, nil
+}
+
+// ParseEvents parses the output of kubectl events
+func ParseEvents(out string) ([]*corev1.Event, error) {
+	var list corev1.List
+	if err := json.Unmarshal([]byte(out), &list); err != nil {
+		return nil, fmt.Errorf("error unmarshaling list from `kubectl get events`: %s", err)
+	}
+
+	if len(list.Items) == 0 {
+		return nil, errors.New("no events found")
+	}
+
+	var events []*corev1.Event
+	for _, i := range list.Items {
+		var e corev1.Event
+		if err := json.Unmarshal(i.Raw, &e); err != nil {
+			return nil, fmt.Errorf("error unmarshaling list event from `kubectl get events`: %s", err)
+		}
+		events = append(events, &e)
+	}
+
+	return events, nil
 }

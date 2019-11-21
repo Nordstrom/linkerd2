@@ -1,7 +1,6 @@
 package test
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -33,6 +32,8 @@ func TestMain(m *testing.M) {
 }
 
 var (
+	configMapUID string
+
 	linkerdSvcs = []string{
 		"linkerd-controller-api",
 		"linkerd-dst",
@@ -88,7 +89,7 @@ var (
 		`(Liveness|Readiness) probe failed: Get http://.*: read tcp .*: read: connection reset by peer`,
 		`(Liveness|Readiness) probe failed: Get http://.*: net/http: request canceled .*\(Client\.Timeout exceeded while awaiting headers\)`,
 		`Failed to update endpoint .*-upgrade/linkerd-.*: Operation cannot be fulfilled on endpoints "linkerd-.*": the object has been modified; please apply your changes to the latest version and try again`,
-		`error killing pod: failed to "KillPodSandbox" for ".*" with KillPodSandboxError: "rpc error: code = Unknown desc = failed to destroy network for sandbox \\".*\\": could not teardown ipv4 dnat: running \[/usr/sbin/iptables -t nat -X CNI-DN-.* --wait\]: exit status 1: iptables: No chain/target/match by that name\.\\n"`,
+		`error killing pod: failed to "KillPodSandbox" for ".*" with KillPodSandboxError: "rpc error: code = Unknown desc = failed to destroy network for sandbox \\".*\\": could not teardown (ipv4|ipv6) dnat: running \[/usr/sbin/(iptables|ip6tables) -t nat -X CNI-DN-.* --wait\]: exit status 1: (iptables|ip6tables): No chain/target/match by that name\.\\n"`,
 	}, "|"))
 
 	injectionCases = []struct {
@@ -134,6 +135,10 @@ func TestVersionPreInstall(t *testing.T) {
 }
 
 func TestCheckPreInstall(t *testing.T) {
+	if TestHelper.ExternalIssuer() {
+		t.Skip("Skipping pre-install check for external issuer test")
+	}
+
 	if TestHelper.UpgradeFromVersion() != "" {
 		t.Skip("Skipping pre-install check for upgrade test")
 	}
@@ -187,6 +192,16 @@ func TestUpgradeTestAppWorksBeforeUpgrade(t *testing.T) {
 	}
 }
 
+func TestRetrieveUidPreUpgrade(t *testing.T) {
+	if TestHelper.UpgradeFromVersion() != "" {
+		var err error
+		configMapUID, err = TestHelper.KubernetesHelper.GetConfigUID(TestHelper.GetLinkerdNamespace())
+		if err != nil || configMapUID == "" {
+			t.Fatalf("Error retrieving linkerd-config's uid %s", err)
+		}
+	}
+}
+
 func TestInstallOrUpgradeCli(t *testing.T) {
 	if TestHelper.GetHelmReleaseName() != "" {
 		return
@@ -203,6 +218,28 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 
 	if TestHelper.GetClusterDomain() != "" {
 		args = append(args, "--cluster-domain", TestHelper.GetClusterDomain())
+	}
+
+	if TestHelper.ExternalIssuer() {
+
+		// short cert lifetime to put some pressure on the CSR request, response code path
+		args = append(args, "--identity-issuance-lifetime=15s", "--identity-external-issuer=true")
+
+		err := TestHelper.CreateControlPlaneNamespaceIfNotExists(TestHelper.GetLinkerdNamespace())
+		if err != nil {
+			t.Fatalf("failed to create %s namespace: %s", TestHelper.GetLinkerdNamespace(), err)
+		}
+
+		secretResource, err := testutil.ReadFile("testdata/issuer_secret_1.yaml")
+		if err != nil {
+			t.Fatalf("failed to load linkerd-identity-issuer resource: %s", err)
+		}
+
+		out, err := TestHelper.KubectlApply(secretResource, TestHelper.GetLinkerdNamespace())
+
+		if err != nil {
+			t.Fatalf("failed to create linkerd-identity-issuer resource: %s", out)
+		}
 	}
 
 	if TestHelper.UpgradeFromVersion() != "" {
@@ -225,9 +262,9 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 	}
 
 	exec := append([]string{cmd}, args...)
-	out, _, err := TestHelper.LinkerdRun(exec...)
+	out, stderr, err := TestHelper.LinkerdRun(exec...)
 	if err != nil {
-		t.Fatalf("linkerd install command failed\n%s", out)
+		t.Fatalf("linkerd install command failed: \n%s\n%s\n%s", out, stderr, out)
 	}
 
 	// test `linkerd upgrade --from-manifests`
@@ -314,6 +351,21 @@ func TestResourcesPostInstall(t *testing.T) {
 		}
 		if err := TestHelper.CheckDeployment(TestHelper.GetLinkerdNamespace(), deploy, spec.replicas); err != nil {
 			t.Fatal(fmt.Errorf("Error validating deploy [%s]:\n%s", deploy, err))
+		}
+	}
+}
+
+func TestRetrieveUidPostUpgrade(t *testing.T) {
+	if TestHelper.UpgradeFromVersion() != "" {
+		newConfigMapUID, err := TestHelper.KubernetesHelper.GetConfigUID(TestHelper.GetLinkerdNamespace())
+		if err != nil || newConfigMapUID == "" {
+			t.Fatalf("Error retrieving linkerd-config's uid %s", err)
+		}
+		if configMapUID != newConfigMapUID {
+			t.Fatalf(
+				"linkerd-config's uid after upgrade [%s] doesn't match its value before the upgrade [%s]",
+				newConfigMapUID, configMapUID,
+			)
 		}
 	}
 }
@@ -441,7 +493,7 @@ func TestInject(t *testing.T) {
 
 			prefixedNs := TestHelper.GetTestNamespace(tc.ns)
 
-			err := TestHelper.CreateNamespaceIfNotExists(prefixedNs, tc.annotations)
+			err := TestHelper.CreateDataPlaneNamespaceIfNotExists(prefixedNs, tc.annotations)
 			if err != nil {
 				t.Fatalf("failed to create %s namespace: %s", prefixedNs, err)
 			}
@@ -627,22 +679,14 @@ func TestEvents(t *testing.T) {
 	if err != nil {
 		t.Errorf("kubectl get events command failed with %s\n%s", err, out)
 	}
-	var list corev1.List
-	if err := json.Unmarshal([]byte(out), &list); err != nil {
-		t.Errorf("Error unmarshaling list from `kubectl get events`: %s", err)
-	}
 
-	if len(list.Items) == 0 {
-		t.Error("No events found")
+	events, err := testutil.ParseEvents(out)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	var unknownEvents []string
-	for _, i := range list.Items {
-		var e corev1.Event
-		if err := json.Unmarshal(i.Raw, &e); err != nil {
-			t.Errorf("Error unmarshaling list event from `kubectl get events`: %s", err)
-		}
-
+	for _, e := range events {
 		if e.Type == corev1.EventTypeNormal {
 			continue
 		}
