@@ -13,6 +13,11 @@ import (
 const (
 	helmDefaultChartDir     = "linkerd2"
 	helmDefaultHAValuesFile = "values-ha.yaml"
+
+	// LinkerdIdentityIssuerType is the type that represents the linkerd-identity service as the certificate issuer
+	LinkerdIdentityIssuerType string = "linkerd"
+	// AwsAcmPcaIdentityIssuerType is the type that represents Aws Acm Pca as the certificate issuer
+	AwsAcmPcaIdentityIssuerType string = "awsacmpca"
 )
 
 type (
@@ -53,6 +58,8 @@ type (
 		Configs                     ConfigJSONs
 		Dashboard                   *Dashboard
 		Identity                    *Identity
+		LinkerdIdentityIssuer       *LinkerdIdentityIssuer
+		AwsAcmPcaIdentityIssuer     *AwsAcmPcaIdentityIssuer
 		ProxyInjector               *ProxyInjector
 		ProfileValidator            *ProfileValidator
 		Tap                         *Tap
@@ -162,12 +169,23 @@ type (
 
 	// Issuer has the Helm variables of the identity issuer
 	Issuer struct {
-		Scheme              string
+		IssuanceLifetime string
+		IssuerType       string
+	}
+
+	// LinkerdIdentityIssuer has the Helm variables of the linkerd identity issuer
+	LinkerdIdentityIssuer struct {
 		ClockSkewAllowance  string
-		IssuanceLifetime    string
 		CrtExpiryAnnotation string
 		CrtExpiry           time.Time
+		Scheme              string
 		TLS                 *TLS
+	}
+
+	// AwsAcmPcaIdentityIssuer has the Helm variables of the aws acm pca identity issuer
+	AwsAcmPcaIdentityIssuer struct {
+		CaArn    string
+		CaRegion string
 	}
 
 	// ProxyInjector has all the proxy injector's Helm variables

@@ -7,8 +7,9 @@
     "trustDomain": "{{.Identity.TrustDomain}}",
     "trustAnchorsPem": "{{required "Please provide the identity trust anchors" .Identity.TrustAnchorsPEM | trim | replace "\n" "\\n"}}",
     "issuanceLifeTime": "{{.Identity.Issuer.IssuanceLifeTime}}",
-    "clockSkewAllowance": "{{.Identity.Issuer.ClockSkewAllowance}}",
-    "scheme": "{{.Identity.Issuer.Scheme}}"
+    "issuerType": "{{.Identity.Issuer.IssuerType}}",
+    "clockSkewAllowance": "{{.LinkerdIdentityIssuer.ClockSkewAllowance}}",
+    "scheme": "{{.LinkerdIdentityIssuer.Scheme}}"
   },
   "autoInjectContext": null,
   "omitWebhookSideEffects": {{.OmitWebhookSideEffects}},
