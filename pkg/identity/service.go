@@ -122,13 +122,13 @@ func (svc *Service) loadCredentials() (tls.Issuer, error) {
 }
 
 // NewACMPCAIdentityService creates a new identity service.
-func NewACMPCAIdentityService(v Validator, i tls.Issuer) *Service {
+func NewACMPCAIdentityService(validator Validator, issuer tls.Issuer, trustAnchors *x509.CertPool, validity *tls.Validity) *Service {
 	return &Service{
-		v,
-		nil,
-		&i,
-		nil,
-		nil,
+		validator,
+		trustAnchors,
+		&issuer,
+		&sync.RWMutex{},
+		validity,
 		nil,
 		"",
 		"",

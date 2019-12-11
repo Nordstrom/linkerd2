@@ -86,6 +86,11 @@ func Main(args []string) {
 		log.Fatalf("Invalid trust domain: %s", err.Error())
 	}
 
+	trustAnchors, err := tls.DecodePEMCertPool(idctx.GetTrustAnchorsPem())
+	if err != nil {
+		log.Fatalf("Failed to read trust anchors: %s", err)
+	}
+
 	//
 	// Create k8s API
 	//
@@ -100,6 +105,9 @@ func Main(args []string) {
 
 	log.Debugf("Using issuer type: %s", idctx.GetIssuer().GetIssuerType())
 
+	issuerEvent := make(chan struct{})
+	issuerError := make(chan error)
+
 	var svc *identity.Service
 	switch idctx.GetIssuer().GetIssuerType() {
 	case charts.LinkerdIdentityIssuerType:
@@ -113,9 +121,6 @@ func Main(args []string) {
 			issuerPathKey = filepath.Join(*issuerPath, corev1.TLSPrivateKeyKey)
 		}
 
-		issuerEvent := make(chan struct{})
-		issuerError := make(chan error)
-
 		//
 		// Create and start FS creds watcher
 		//
@@ -125,11 +130,6 @@ func Main(args []string) {
 				log.Fatalf("Failed to start creds watcher: %s", err)
 			}
 		}()
-
-		trustAnchors, err := tls.DecodePEMCertPool(idctx.GetTrustAnchorsPem())
-		if err != nil {
-			log.Fatalf("Failed to read trust anchors: %s", err)
-		}
 
 		creds, err := tls.ReadPEMCreds(
 			filepath.Join(*issuerPath, consts.IdentityIssuerKeyName),
@@ -183,6 +183,7 @@ func Main(args []string) {
 		go func() {
 			svc.Run(issuerEvent, issuerError)
 		}()
+
 	case charts.AwsAcmPcaIdentityIssuerType:
 		region := idctx.GetAwsacmpcaIdentityIssuer().GetCaRegion()
 		log.Debugf("awsacmpca configured region: %s", region)
@@ -203,7 +204,11 @@ func Main(args []string) {
 		if err != nil {
 			log.Fatalf("Failed to create the AWS ACM PCA Delegate: %v", err)
 		}
-		svc = identity.NewACMPCAIdentityService(v, ca)
+		validity := tls.Validity{
+			ClockSkewAllowance: tls.DefaultClockSkewAllowance,
+			Lifetime:           issuanceLifetime,
+		}
+		svc = identity.NewACMPCAIdentityService(v, ca, trustAnchors, &validity)
 	}
 
 	//
