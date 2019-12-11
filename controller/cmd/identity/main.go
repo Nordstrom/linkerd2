@@ -17,11 +17,13 @@ import (
 	"github.com/golang/protobuf/ptypes"
 	idctl "github.com/linkerd/linkerd2/controller/identity"
 	"github.com/linkerd/linkerd2/pkg/admin"
+	"github.com/linkerd/linkerd2/pkg/charts"
 	"github.com/linkerd/linkerd2/pkg/config"
 	"github.com/linkerd/linkerd2/pkg/flags"
 	"github.com/linkerd/linkerd2/pkg/identity"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	consts "github.com/linkerd/linkerd2/pkg/k8s"
+	pcadelegate "github.com/linkerd/linkerd2/pkg/pcadelegate"
 	"github.com/linkerd/linkerd2/pkg/prometheus"
 	"github.com/linkerd/linkerd2/pkg/tls"
 	"github.com/linkerd/linkerd2/pkg/trace"
@@ -70,7 +72,7 @@ func Main(args []string) {
 		os.Exit(0)
 	}
 
-	if idctx.Scheme == k8s.IdentityIssuerSchemeLinkerd {
+	if idctx.GetLinkerdIdentityIssuer().GetScheme() == k8s.IdentityIssuerSchemeLinkerd {
 		issuerPathCrt = filepath.Join(*issuerPath, k8s.IdentityIssuerCrtName)
 		issuerPathKey = filepath.Join(*issuerPath, k8s.IdentityIssuerKeyName)
 	} else {
@@ -84,45 +86,17 @@ func Main(args []string) {
 		log.Fatalf("Invalid trust domain: %s", err.Error())
 	}
 
-	trustAnchors, err := tls.DecodePEMCertPool(idctx.GetTrustAnchorsPem())
-	if err != nil {
-		log.Fatalf("Failed to read trust anchors: %s", err)
-	}
-
-	validity := tls.Validity{
-		ClockSkewAllowance: tls.DefaultClockSkewAllowance,
-		Lifetime:           identity.DefaultIssuanceLifetime,
-	}
-	if pbd := idctx.GetClockSkewAllowance(); pbd != nil {
-		csa, err := ptypes.Duration(pbd)
-		if err != nil {
-			log.Warnf("Invalid clock skew allowance: %s", err)
-		} else {
-			validity.ClockSkewAllowance = csa
-		}
-	}
-	if pbd := idctx.GetIssuanceLifetime(); pbd != nil {
+	issuanceLifetime := identity.DefaultIssuanceLifetime
+	if pbd := idctx.GetIssuer().GetIssuanceLifetime(); pbd != nil {
 		il, err := ptypes.Duration(pbd)
 		if err != nil {
-			log.Warnf("Invalid issuance lifetime: %s", err)
+			log.Warnf("Invalid issuance lifetime: %s, defaulting to 24h", err)
 		} else {
-			validity.Lifetime = il
+			issuanceLifetime = il
 		}
 	}
 
-	expectedName := fmt.Sprintf("identity.%s.%s", controllerNS, trustDomain)
-	issuerEvent := make(chan struct{})
-	issuerError := make(chan error)
-
-	//
-	// Create and start FS creds watcher
-	//
-	watcher := idctl.NewFsCredsWatcher(*issuerPath, issuerEvent, issuerError)
-	go func() {
-		if err := watcher.StartWatching(ctx); err != nil {
-			log.Fatalf("Failed to start creds watcher: %s", err)
-		}
-	}()
+	log.Debugf("Using issuer type: %s", idctx.GetIssuer().GetIssuerType())
 
 	//
 	// Create k8s API
@@ -136,32 +110,101 @@ func Main(args []string) {
 		log.Fatalf("Failed to initialize identity service: %s", err)
 	}
 
-	// Create K8s event recorder
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{
-		Interface: k8sAPI.CoreV1().Events(controllerNS),
-	})
-	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: componentName})
-	deployment, err := k8sAPI.AppsV1().Deployments(controllerNS).Get(componentName, v1machinary.GetOptions{})
+	var svc *identity.Service
+	switch idctx.GetIssuer().GetIssuerType() {
+	case charts.LinkerdIdentityIssuerType:
+		issuerEvent := make(chan struct{})
+		issuerError := make(chan error)
 
-	if err != nil {
-		log.Fatalf("Failed to construct k8s event recorder: %s", err)
-	}
+		//
+		// Create and start FS creds watcher
+		//
+		watcher := idctl.NewFsCredsWatcher(*issuerPath, issuerEvent, issuerError)
+		go func() {
+			if err := watcher.StartWatching(ctx); err != nil {
+				log.Fatalf("Failed to start creds watcher: %s", err)
+			}
+		}()
 
-	recordEventFunc := func(eventType, reason, message string) {
-		recorder.Event(deployment, eventType, reason, message)
-	}
+		trustAnchors, err := tls.DecodePEMCertPool(idctx.GetTrustAnchorsPem())
+		if err != nil {
+			log.Fatalf("Failed to read trust anchors: %s", err)
+		}
 
-	//
-	// Create, initialize and run service
-	//
-	svc := identity.NewService(v, trustAnchors, &validity, recordEventFunc, expectedName, issuerPathCrt, issuerPathKey)
-	if err = svc.Initialize(); err != nil {
-		log.Fatalf("Failed to initialize identity service: %s", err)
+		creds, err := tls.ReadPEMCreds(
+			filepath.Join(*issuerPath, consts.IdentityIssuerKeyName),
+			filepath.Join(*issuerPath, consts.IdentityIssuerCrtName),
+		)
+		if err != nil {
+			log.Fatalf("Failed to read CA from %s: %s", *issuerPath, err)
+		}
+
+		expectedName := fmt.Sprintf("identity.%s.%s", controllerNS, trustDomain)
+		if err := creds.Crt.Verify(trustAnchors, expectedName); err != nil {
+			log.Fatalf("Failed to verify issuer credentials for '%s' with trust anchors: %s", expectedName, err)
+		}
+
+		validity := tls.Validity{
+			ClockSkewAllowance: tls.DefaultClockSkewAllowance,
+			Lifetime:           issuanceLifetime,
+		}
+		if pbd := idctx.GetLinkerdIdentityIssuer().GetClockSkewAllowance(); pbd != nil {
+			csa, err := ptypes.Duration(pbd)
+			if err != nil {
+				log.Warnf("Invalid clock skew allowance: %s", err)
+			} else {
+				validity.ClockSkewAllowance = csa
+			}
+		}
+
+		// Create K8s event recorder
+		eventBroadcaster := record.NewBroadcaster()
+		eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{
+			Interface: k8sAPI.CoreV1().Events(controllerNS),
+		})
+		recorder := eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: componentName})
+		deployment, err := k8sAPI.AppsV1().Deployments(controllerNS).Get(componentName, v1machinary.GetOptions{})
+
+		if err != nil {
+			log.Fatalf("Failed to construct k8s event recorder: %s", err)
+		}
+
+		recordEventFunc := func(eventType, reason, message string) {
+			recorder.Event(deployment, eventType, reason, message)
+		}
+
+		//
+		// Create, initialize and run service
+		//
+		svc = identity.NewService(v, trustAnchors, &validity, recordEventFunc, expectedName, issuerPathCrt, issuerPathKey)
+		if err = svc.Initialize(); err != nil {
+			log.Fatalf("Failed to initialize identity service: %s", err)
+		}
+		go func() {
+			svc.Run(issuerEvent, issuerError)
+		}()
+	case charts.AwsAcmPcaIdentityIssuerType:
+		region := idctx.GetAwsacmpcaIdentityIssuer().GetCaRegion()
+		log.Debugf("awsacmpca configured region: %s", region)
+		arn := idctx.GetAwsacmpcaIdentityIssuer().GetCaArn()
+		log.Debugf("awsacmpca configured arn: %s", arn)
+		requestRetryer, retryerErr := pcadelegate.NewACMPCARetry(5)
+		if retryerErr != nil {
+			log.Fatalf("Failed to create the ACMPCA request retryer: %v\n", retryerErr)
+		}
+		params := pcadelegate.CADelegateParams{
+			Region:         region,
+			CaARN:          arn,
+			ValidityPeriod: issuanceLifetime,
+			SigAlgorithm:   pcadelegate.Sha256withrsa,
+			Retryer:        requestRetryer,
+		}
+		ca, err := pcadelegate.NewCADelegate(params)
+		if err != nil {
+			log.Fatalf("Failed to create the AWS ACM PCA Delegate: %v", err)
+		}
+		svc = identity.NewACMPCAIdentityService(v, ca)
 	}
-	go func() {
-		svc.Run(issuerEvent, issuerError)
-	}()
 
 	//
 	// Bind and serve

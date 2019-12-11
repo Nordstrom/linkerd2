@@ -121,6 +121,21 @@ func (svc *Service) loadCredentials() (tls.Issuer, error) {
 	return tls.NewCA(*creds, *svc.validity), nil
 }
 
+// NewACMPCAIdentityService creates a new identity service.
+func NewACMPCAIdentityService(v Validator, i tls.Issuer) *Service {
+	return &Service{
+		v,
+		nil,
+		&i,
+		nil,
+		nil,
+		nil,
+		"",
+		"",
+		"",
+	}
+}
+
 // NewService creates a new identity service.
 func NewService(validator Validator, trustAnchors *x509.CertPool, validity *tls.Validity, recordEvent func(eventType, reason, message string), expectedName, issuerPathCrt, issuerPathKey string) *Service {
 	return &Service{

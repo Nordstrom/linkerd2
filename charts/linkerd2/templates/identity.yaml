@@ -3,7 +3,8 @@
 ###
 ### Identity Controller Service
 ###
-{{ if and (.Values.Identity.Issuer) (eq .Values.Identity.Issuer.Scheme "linkerd.io/tls") -}}
+{{ if and (.Values.Identity.Issuer) (eq .Values.Identity.Issuer.IssuerType "linkerd") -}}
+{{ if and (.Values.LinkerdIdentityIssuer) (eq .Values.LinkerdIdentityIssuer.Scheme "linkerd.io/tls") -}}
 ---
 kind: Secret
 apiVersion: v1
@@ -15,12 +16,13 @@ metadata:
     {{.Values.ControllerNamespaceLabel}}: {{.Values.Namespace}}
   annotations:
     {{.Values.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.LinkerdVersion) .Values.CliVersion}}
-    {{- if .Values.Identity.Issuer.CrtExpiryAnnotation}}
-    {{.Values.Identity.Issuer.CrtExpiryAnnotation}}: {{required "Please provide the identity issuer certificate expiry date" .Values.Identity.Issuer.CrtExpiry}}
+    {{- if .Values.LinkerdIdentityIssuer.CrtExpiryAnnotation}}
+    {{.Values.LinkerdIdentityIssuer.CrtExpiryAnnotation}}: {{required "Please provide the identity issuer certificate expiry date" .Values.LinkerdIdentityIssuer.CrtExpiry}}
     {{- end}}
 data:
-  crt.pem: {{b64enc (required "Please provide the identity issuer certificate" .Values.Identity.Issuer.TLS.CrtPEM | trim)}}
-  key.pem: {{b64enc (required "Please provide the identity issue private key" .Values.Identity.Issuer.TLS.KeyPEM | trim)}}
+  crt.pem: {{b64enc (required "Please provide the identity issuer certificate" .Values.LinkerdIdentityIssuer.TLS.CrtPEM | trim)}}
+  key.pem: {{b64enc (required "Please provide the identity issue private key" .Values.LinkerdIdentityIssuer.TLS.KeyPEM | trim)}}
+{{- end}}
 {{- end}}
 ---
 kind: Service
@@ -108,8 +110,10 @@ spec:
         volumeMounts:
         - mountPath: /var/run/linkerd/config
           name: config
+        {{- if eq .Values.Identity.Issuer.IssuerType "linkerd"}}
         - mountPath: /var/run/linkerd/identity/issuer
           name: identity-issuer
+        {{- end }}
       - {{- include "partials.proxy" . | indent 8 | trimPrefix (repeat 7 " ") }}
       {{ if not .Values.NoInitContainer -}}
       initContainers:
@@ -120,8 +124,10 @@ spec:
       - configMap:
           name: linkerd-config
         name: config
+      {{ if eq .Values.Identity.Issuer.IssuerType "linkerd" -}}
       - name: identity-issuer
         secret:
           secretName: linkerd-identity-issuer
+      {{ end -}}
       - {{- include "partials.proxy.volumes.identity" . | indent 8 | trimPrefix (repeat 7 " ") }}
 {{end -}}

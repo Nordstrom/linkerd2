@@ -19,7 +19,7 @@ func TestRenderHelm(t *testing.T) {
 	// override certain defaults with pinned values.
 	// use the Helm lib to render the templates.
 	// the golden file is generated using the following `helm template` command:
-	// helm template --set Identity.TrustAnchorsPEM="test-crt-pem" --set Identity.Issuer.TLS.CrtPEM="test-crt-pem" --set Identity.Issuer.TLS.KeyPEM="test-key-pem" charts/linkerd2  --set Identity.Issuer.CrtExpiry="Jul 30 17:21:14 2020" --set ProxyInjector.KeyPEM="test-proxy-injector-key-pem" --set ProxyInjector.CrtPEM="test-proxy-injector-crt-pem" --set ProfileValidator.KeyPEM="test-profile-validator-key-pem" --set ProfileValidator.CrtPEM="test-profile-validator-crt-pem" --set Tap.KeyPEM="test-tap-key-pem" --set Tap.CrtPEM="test-tap-crt-pem" --set LinkerdVersion="linkerd-version"  > cli/cmd/testdata/install_helm_output.golden
+	// helm template --set Identity.Issuer.IssuerType="linkerd" --set Identity.TrustAnchorsPEM="test-crt-pem" --set LinkerdIdentityIssuer.TLS.CrtPEM="test-crt-pem" --set LinkerdIdentityIssuer.TLS.KeyPEM="test-key-pem" charts/linkerd2  --set LinkerdIdentityIssuer.CrtExpiry="Jul 30 17:21:14 2020" --set ProxyInjector.KeyPEM="test-proxy-injector-key-pem" --set ProxyInjector.CrtPEM="test-proxy-injector-crt-pem" --set ProfileValidator.KeyPEM="test-profile-validator-key-pem" --set ProfileValidator.CrtPEM="test-profile-validator-crt-pem" --set Tap.KeyPEM="test-tap-key-pem" --set Tap.CrtPEM="test-tap-crt-pem" --set LinkerdVersion="linkerd-version" > cli/cmd/testdata/install_helm_output.golden
 
 	t.Run("Non-HA mode", func(t *testing.T) {
 		ha := false
@@ -48,14 +48,17 @@ func testRenderHelm(t *testing.T, chart *pb.Chart, goldenFileName string) {
     "TrustAnchorsPEM":"test-trust-anchor",
     "TrustDomain":"test.trust.domain",
     "Issuer":{
-      "CrtExpiry":"Jul 30 17:21:14 2020",
-      "CrtExpiryAnnotation":"%s",
-      "TLS":{
-        "KeyPEM":"test-key-pem",
-        "CrtPEM":"test-crt-pem"
-      }
+			"IssuerType":"linkerd"
     }
-  },
+	},
+	"LinkerdIdentityIssuer":{
+		"CrtExpiry":"Jul 30 17:21:14 2020",
+		"CrtExpiryAnnotation":"%s",
+		"TLS":{
+			"KeyPEM":"test-key-pem",
+			"CrtPEM":"test-crt-pem"
+		}
+	},
   "Configs": null,
   "Proxy":{
     "Image":{
