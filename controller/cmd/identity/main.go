@@ -48,8 +48,6 @@ func Main(args []string) {
 		"/var/run/linkerd/identity/issuer",
 		"path to directory containing issuer credentials")
 
-	var issuerPathCrt string
-	var issuerPathKey string
 	traceCollector := flags.AddTraceFlags(cmd)
 	componentName := "linkerd-identity"
 
@@ -72,20 +70,6 @@ func Main(args []string) {
 		os.Exit(0)
 	}
 
-	if idctx.GetLinkerdIdentityIssuer().GetScheme() == k8s.IdentityIssuerSchemeLinkerd {
-		issuerPathCrt = filepath.Join(*issuerPath, k8s.IdentityIssuerCrtName)
-		issuerPathKey = filepath.Join(*issuerPath, k8s.IdentityIssuerKeyName)
-	} else {
-		issuerPathCrt = filepath.Join(*issuerPath, corev1.TLSCertKey)
-		issuerPathKey = filepath.Join(*issuerPath, corev1.TLSPrivateKeyKey)
-	}
-
-	trustDomain := idctx.GetTrustDomain()
-	dom, err := idctl.NewTrustDomain(controllerNS, trustDomain)
-	if err != nil {
-		log.Fatalf("Invalid trust domain: %s", err.Error())
-	}
-
 	issuanceLifetime := identity.DefaultIssuanceLifetime
 	if pbd := idctx.GetIssuer().GetIssuanceLifetime(); pbd != nil {
 		il, err := ptypes.Duration(pbd)
@@ -96,7 +80,11 @@ func Main(args []string) {
 		}
 	}
 
-	log.Debugf("Using issuer type: %s", idctx.GetIssuer().GetIssuerType())
+	trustDomain := idctx.GetTrustDomain()
+	dom, err := idctl.NewTrustDomain(controllerNS, trustDomain)
+	if err != nil {
+		log.Fatalf("Invalid trust domain: %s", err.Error())
+	}
 
 	//
 	// Create k8s API
@@ -110,9 +98,21 @@ func Main(args []string) {
 		log.Fatalf("Failed to initialize identity service: %s", err)
 	}
 
+	log.Debugf("Using issuer type: %s", idctx.GetIssuer().GetIssuerType())
+
 	var svc *identity.Service
 	switch idctx.GetIssuer().GetIssuerType() {
 	case charts.LinkerdIdentityIssuerType:
+		var issuerPathCrt string
+		var issuerPathKey string
+		if idctx.GetLinkerdIdentityIssuer().GetScheme() == k8s.IdentityIssuerSchemeLinkerd {
+			issuerPathCrt = filepath.Join(*issuerPath, k8s.IdentityIssuerCrtName)
+			issuerPathKey = filepath.Join(*issuerPath, k8s.IdentityIssuerKeyName)
+		} else {
+			issuerPathCrt = filepath.Join(*issuerPath, corev1.TLSCertKey)
+			issuerPathKey = filepath.Join(*issuerPath, corev1.TLSPrivateKeyKey)
+		}
+
 		issuerEvent := make(chan struct{})
 		issuerError := make(chan error)
 
