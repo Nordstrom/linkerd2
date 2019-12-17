@@ -269,17 +269,19 @@ func (options *upgradeOptions) validateAndBuild(stage string, k kubernetes.Inter
 	}
 
 	var identity *charts.Identity
+	var linkerdIdentityIssuer *charts.LinkerdIdentityIssuer
+	var awsAcmPcaIdentityIssuer *charts.AwsAcmPcaIdentityIssuer
 	idctx := configs.GetGlobal().GetIdentityContext()
 	if idctx.GetTrustDomain() == "" || idctx.GetTrustAnchorsPem() == "" {
 		// If there wasn't an idctx, or if it doesn't specify the required fields, we
 		// must be upgrading from a version that didn't support identity, so generate it anew...
-		identity, err = options.identityOptions.genValues()
+		identity, linkerdIdentityIssuer, err = options.identityOptions.genValues()
 		if err != nil {
 			return nil, nil, err
 		}
-		configs.GetGlobal().IdentityContext = toIdentityContext(identity)
+		configs.GetGlobal().IdentityContext = identityContextFrom(identity, linkerdIdentityIssuer, awsAcmPcaIdentityIssuer)
 	} else {
-		identity, err = options.fetchIdentityValues(k, idctx)
+		identity, linkerdIdentityIssuer, awsAcmPcaIdentityIssuer, err = options.fetchIdentityValues(k, idctx)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -292,6 +294,8 @@ func (options *upgradeOptions) validateAndBuild(stage string, k kubernetes.Inter
 		return nil, nil, fmt.Errorf("could not build install configuration: %s", err)
 	}
 	values.Identity = identity
+	values.LinkerdIdentityIssuer = linkerdIdentityIssuer
+	values.AwsAcmPcaIdentityIssuer = awsAcmPcaIdentityIssuer
 	// we need to do that if we have updated the anchors as the config map json has already been generated
 	if values.Identity.TrustAnchorsPEM != configs.Global.IdentityContext.TrustAnchorsPem {
 		// override the anchors in config
@@ -380,16 +384,16 @@ func fetchTLSSecret(k kubernetes.Interface, webhook string, options *upgradeOpti
 //
 // This bypasses the public API so that we can access secrets and validate
 // permissions.
-func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx *pb.IdentityContext) (*charts.Identity, error) {
+func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx *pb.IdentityContext) (*charts.Identity, *charts.LinkerdIdentityIssuer, *charts.AwsAcmPcaIdentityIssuer, error) {
 	if idctx == nil {
-		return nil, nil
+		return nil, nil, nil, nil
 	}
 
-	if idctx.Scheme == "" {
+	if idctx.GetLinkerdIdentityIssuer().GetScheme() == "" {
 		// if this is empty, then we are upgrading from a version
 		// that did not support issuer schemes. Just default to the
 		// linkerd one.
-		idctx.Scheme = k8s.IdentityIssuerSchemeLinkerd
+		idctx.LinkerdIdentityIssuer.Scheme = k8s.IdentityIssuerSchemeLinkerd
 	}
 
 	var trustAnchorsPEM string
@@ -399,7 +403,7 @@ func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx
 	if options.identityOptions.trustPEMFile != "" {
 		trustb, err := ioutil.ReadFile(options.identityOptions.trustPEMFile)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 		trustAnchorsPEM = string(trustb)
 	} else {
@@ -409,27 +413,44 @@ func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx
 	if options.identityOptions.crtPEMFile != "" && options.identityOptions.keyPEMFile != "" {
 		issuerData, err = readIssuer(trustAnchorsPEM, options.identityOptions.crtPEMFile, options.identityOptions.keyPEMFile)
 	} else {
-		issuerData, err = fetchIssuer(k, trustAnchorsPEM, idctx.Scheme)
+		issuerData, err = fetchIssuer(k, trustAnchorsPEM, idctx.GetLinkerdIdentityIssuer().GetScheme())
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
-	return &charts.Identity{
+	identity := &charts.Identity{
 		TrustDomain:     idctx.GetTrustDomain(),
 		TrustAnchorsPEM: trustAnchorsPEM,
 		Issuer: &charts.Issuer{
-			Scheme:              idctx.Scheme,
-			ClockSkewAllowance:  idctx.GetClockSkewAllowance().String(),
-			IssuanceLifetime:    idctx.GetIssuanceLifetime().String(),
+			IssuanceLifetime: idctx.GetIssuer().GetIssuanceLifetime().String(),
+			IssuerType:       idctx.GetIssuer().GetIssuerType(),
+		},
+	}
+
+	var linkerdIdentityIssuer *charts.LinkerdIdentityIssuer
+	if identity.Issuer.IssuerType == charts.LinkerdIdentityIssuerType {
+		linkerdIdentityIssuer = &charts.LinkerdIdentityIssuer{
+			ClockSkewAllowance:  idctx.GetLinkerdIdentityIssuer().GetClockSkewAllowance().String(),
 			CrtExpiry:           issuerData.exp,
 			CrtExpiryAnnotation: k8s.IdentityIssuerExpiryAnnotation,
+			Scheme:              idctx.GetLinkerdIdentityIssuer().GetScheme(),
 			TLS: &charts.TLS{
 				KeyPEM: issuerData.key,
 				CrtPEM: issuerData.crt,
 			},
-		},
-	}, nil
+		}
+	}
+
+	var awsAcmPcaIdentityIssuer *charts.AwsAcmPcaIdentityIssuer
+	if identity.Issuer.IssuerType == charts.AwsAcmPcaIdentityIssuerType {
+		awsAcmPcaIdentityIssuer = &charts.AwsAcmPcaIdentityIssuer{
+			CaArn:    idctx.GetAwsacmpcaIdentityIssuer().GetCaArn(),
+			CaRegion: idctx.GetAwsacmpcaIdentityIssuer().GetCaRegion(),
+		}
+	}
+
+	return identity, linkerdIdentityIssuer, awsAcmPcaIdentityIssuer, nil
 }
 
 type issuerData struct {

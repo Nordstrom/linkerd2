@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/linkerd/linkerd2/controller/gen/config"
 	pb "github.com/linkerd/linkerd2/controller/gen/config"
@@ -41,13 +42,17 @@ func TestRender(t *testing.T) {
 		t.Fatalf("Unexpected error: %v\n", err)
 	}
 
-	identityContext := toIdentityContext(&charts.Identity{
+	identityContext := identityContextFrom(&charts.Identity{
 		Issuer: &charts.Issuer{
-			ClockSkewAllowance: "20s",
-			IssuanceLifetime:   "86400s",
+			IssuanceLifetime: "86400s",
+			IssuerType:       "linkerd",
 		},
 		TrustAnchorsPEM: "test-trust-anchor",
-	})
+	},
+		&charts.LinkerdIdentityIssuer{
+			ClockSkewAllowance: "20s",
+		}, nil)
+
 	metaConfig := metaOptions.configs(identityContext)
 	metaConfig.Global.LinkerdNamespace = "Namespace"
 	metaValues := &charts.Values{
@@ -82,11 +87,12 @@ func TestRender(t *testing.T) {
 			Proxy:   "ProxyConfig",
 			Install: "InstallConfig",
 		},
-		ControllerReplicas: 1,
-		Identity:           defaultValues.Identity,
-		ProxyInjector:      defaultValues.ProxyInjector,
-		ProfileValidator:   defaultValues.ProfileValidator,
-		Tap:                defaultValues.Tap,
+		ControllerReplicas:    1,
+		Identity:              defaultValues.Identity,
+		LinkerdIdentityIssuer: defaultValues.LinkerdIdentityIssuer,
+		ProxyInjector:         defaultValues.ProxyInjector,
+		ProfileValidator:      defaultValues.ProfileValidator,
+		Tap:                   defaultValues.Tap,
 		Proxy: &charts.Proxy{
 			Image: &charts.Image{
 				Name:       "ProxyImageName",
@@ -162,10 +168,22 @@ func TestRender(t *testing.T) {
 	noInitContainerValues, _, _ := noInitContainerOptions.validateAndBuild("", nil)
 	addFakeTLSSecrets(noInitContainerValues)
 
+	awsacmpcaOptions, _ := testInstallOptions()
+	awsacmpcaOptions.identityOptions.issuerType = "awsacmpca"
+	awsacmpcaOptions.identityOptions.region = "us-west-2"
+	awsacmpcaOptions.identityOptions.arn = "arn:aws:acm-pca:us-west-2:1234:certificate-authority/123-123-123"
+	awsacmpcaOptions.identityOptions.issuanceLifetime = 3 * 24 * time.Hour
+	awsacmpcaValues, _, err := awsacmpcaOptions.validateAndBuild("", nil)
+	addFakeTLSSecrets(awsacmpcaValues)
+	if err != nil {
+		t.Fatalf("Unexpected error validating options: %v", err)
+	}
+
 	testCases := []struct {
 		values         *charts.Values
 		goldenFileName string
 	}{
+		{awsacmpcaValues, "install_control-plane-awsacmpca.golden"},
 		{defaultValues, "install_default.golden"},
 		{configValues, "install_config.golden"},
 		{controlPlaneValues, "install_control-plane.golden"},
@@ -300,37 +318,49 @@ func TestValidate(t *testing.T) {
 	})
 
 	t.Run("Rejects identity cert files data when external issuer is set", func(t *testing.T) {
+		withoutCertDataOptions, _ := testInstallOptions()
+		withoutCertDataOptions.identityOptions.crtPEMFile = ""
+		withoutCertDataOptions.identityOptions.keyPEMFile = ""
+		withoutCertDataOptions.identityOptions.trustPEMFile = ""
+		withoutCertDataOptions.identityOptions.identityExternalIssuer = true
+		withoutCertDataIdentityOptions := withoutCertDataOptions.identityOptions
 
-		options, err := testInstallOptions()
-		options.identityOptions.crtPEMFile = ""
-		options.identityOptions.keyPEMFile = ""
-		options.identityOptions.trustPEMFile = ""
+		withCrtFileOptions, _ := testInstallOptions()
+		withCrtFileOptions.identityOptions.crtPEMFile = ""
+		withCrtFileOptions.identityOptions.keyPEMFile = ""
+		withCrtFileOptions.identityOptions.trustPEMFile = ""
+		withCrtFileOptions.identityOptions.identityExternalIssuer = true
+		withCrtFileOptions.identityOptions.crtPEMFile = "crt-file"
+		withCrtFileIdentityOptions := withCrtFileOptions.identityOptions
 
-		if err != nil {
-			t.Fatalf("Unexpected error: %v\n", err)
-		}
+		withTrustAnchorsFileOptions, _ := testInstallOptions()
+		withTrustAnchorsFileOptions.identityOptions.crtPEMFile = ""
+		withTrustAnchorsFileOptions.identityOptions.keyPEMFile = ""
+		withTrustAnchorsFileOptions.identityOptions.trustPEMFile = ""
+		withTrustAnchorsFileOptions.identityOptions.identityExternalIssuer = true
+		withTrustAnchorsFileOptions.identityOptions.trustPEMFile = "ta-file"
+		withTrustAnchorsFileIdentityOptions := withTrustAnchorsFileOptions.identityOptions
 
-		withoutCertDataOptions := options.identityOptions
-		withoutCertDataOptions.identityExternalIssuer = true
-		withCrtFile := *withoutCertDataOptions
-		withCrtFile.crtPEMFile = "crt-file"
-		withTrustAnchorsFile := *withoutCertDataOptions
-		withTrustAnchorsFile.trustPEMFile = "ta-file"
-		withKeyFile := *withoutCertDataOptions
-		withKeyFile.keyPEMFile = "key-file"
+		withKeyFileOptions, _ := testInstallOptions()
+		withKeyFileOptions.identityOptions.crtPEMFile = ""
+		withKeyFileOptions.identityOptions.keyPEMFile = ""
+		withKeyFileOptions.identityOptions.trustPEMFile = ""
+		withKeyFileOptions.identityOptions.identityExternalIssuer = true
+		withKeyFileOptions.identityOptions.keyPEMFile = "key-file"
+		withKeyFileIdentityOptions := withKeyFileOptions.identityOptions
 
 		testCases := []struct {
 			input         *installIdentityOptions
 			expectedError string
 		}{
-			{withoutCertDataOptions, ""},
-			{&withCrtFile, "--identity-issuer-certificate-file must not be specified if --identity-external-issuer=true"},
-			{&withTrustAnchorsFile, "--identity-trust-anchors-file must not be specified if --identity-external-issuer=true"},
-			{&withKeyFile, "--identity-issuer-key-file must not be specified if --identity-external-issuer=true"},
+			{withoutCertDataIdentityOptions, ""},
+			{withCrtFileIdentityOptions, "--identity-issuer-certificate-file must not be specified if --identity-external-issuer=true"},
+			{withTrustAnchorsFileIdentityOptions, "--identity-trust-anchors-file must not be specified if --identity-external-issuer=true"},
+			{withKeyFileIdentityOptions, "--identity-issuer-key-file must not be specified if --identity-external-issuer=true"},
 		}
 
 		for _, tc := range testCases {
-			err = tc.input.validate()
+			err := tc.input.validate()
 
 			if tc.expectedError != "" {
 				if err == nil {
@@ -341,8 +371,7 @@ func TestValidate(t *testing.T) {
 				}
 			} else {
 				if err != nil {
-					t.Fatalf("Expected no error bu got \"%s\"", err)
-
+					t.Fatalf("Expected no error but got \"%s\"", err)
 				}
 			}
 		}

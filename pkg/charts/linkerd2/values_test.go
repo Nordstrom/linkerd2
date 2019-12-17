@@ -56,17 +56,20 @@ func TestNewValues(t *testing.T) {
 		Identity: &Identity{
 			TrustDomain: "cluster.local",
 			Issuer: &Issuer{
-				ClockSkewAllowance:  "20s",
-				IssuanceLifetime:    "86400s",
-				CrtExpiryAnnotation: "linkerd.io/identity-issuer-expiry",
-				TLS:                 &TLS{},
-				Scheme:              "linkerd.io/tls",
+				IssuanceLifetime: "86400s",
+				IssuerType:       "linkerd",
 			},
 		},
-
-		ProxyInjector:    &ProxyInjector{TLS: &TLS{}},
-		ProfileValidator: &ProfileValidator{TLS: &TLS{}},
-		Tap:              &Tap{TLS: &TLS{}},
+		LinkerdIdentityIssuer: &LinkerdIdentityIssuer{
+			ClockSkewAllowance:  "20s",
+			CrtExpiryAnnotation: "linkerd.io/identity-issuer-expiry",
+			Scheme:              "linkerd.io/tls",
+			TLS:                 &TLS{},
+		},
+		AwsAcmPcaIdentityIssuer: &AwsAcmPcaIdentityIssuer{},
+		ProxyInjector:           &ProxyInjector{TLS: &TLS{}},
+		ProfileValidator:        &ProfileValidator{TLS: &TLS{}},
+		Tap:                     &Tap{TLS: &TLS{}},
 
 		ControlPlaneTracing: false,
 
