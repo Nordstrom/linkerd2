@@ -1,4 +1,5 @@
 import { StringParam, withQueryParams } from 'use-query-params';
+import { handlePageVisibility, withPageVisibility } from './util/PageVisibility.jsx';
 
 import Button from '@material-ui/core/Button';
 import Card from '@material-ui/core/Card';
@@ -48,8 +49,8 @@ const toResourceName = (query, typeKey, nameKey) => {
 
 const styles = theme => ({
   root: {
-    marginTop: 3 * theme.spacing.unit,
-    marginBottom:theme.spacing.unit,
+    marginTop: theme.spacing(3),
+    marginBottom:theme.spacing(1),
   },
   formControl: {
     minWidth: 200,
@@ -61,6 +62,7 @@ class TopRoutes extends React.Component {
       PrefixedLink: PropTypes.func.isRequired,
     }).isRequired,
     classes: PropTypes.shape({}).isRequired,
+    isPageVisible: PropTypes.bool.isRequired,
     query: topRoutesQueryPropType.isRequired,
     setQuery: PropTypes.func.isRequired,
   }
@@ -94,6 +96,15 @@ class TopRoutes extends React.Component {
   componentDidMount() {
     this._isMounted = true; // https://reactjs.org/blog/2015/12/16/ismounted-antipattern.html
     this.startServerPolling();
+  }
+
+  componentDidUpdate(prevProps) {
+    handlePageVisibility({
+      prevVisibilityState: prevProps.isPageVisible,
+      currentVisibilityState: this.props.isPageVisible,
+      onVisible: () => this.startServerPolling(),
+      onHidden: () => this.stopServerPolling(),
+    });
   }
 
   componentWillUnmount() {
@@ -149,6 +160,7 @@ class TopRoutes extends React.Component {
   stopServerPolling = () => {
     window.clearInterval(this.timerId);
     this.api.cancelCurrentRequests();
+    this.setState({ pendingRequests: false });
   }
 
   handleBtnClick = inProgress => () => {
@@ -190,8 +202,8 @@ class TopRoutes extends React.Component {
 
     return (
       <CardContent>
-        <Grid container direction="column" spacing={16}>
-          <Grid item container spacing={32} alignItems="center" justify="flex-start">
+        <Grid container direction="column" spacing={2}>
+          <Grid item container spacing={4} alignItems="center" justify="flex-start">
             <Grid item>
               { this.renderNamespaceDropdown("Namespace", "namespace", "Namespace to query") }
             </Grid>
@@ -221,7 +233,7 @@ class TopRoutes extends React.Component {
             </Grid>
           </Grid>
 
-          <Grid item container spacing={32} alignItems="center" justify="flex-start">
+          <Grid item container spacing={4} alignItems="center" justify="flex-start">
             <Grid item>
               { this.renderNamespaceDropdown("To Namespace", "to_namespace", "Namespece of target resource") }
             </Grid>
@@ -244,7 +256,7 @@ class TopRoutes extends React.Component {
       <FormControl className={classes.formControl}>
         <InputLabel htmlFor={`${key}-dropdown`}>{title}</InputLabel>
         <Select
-          value={this.state.query[key]}
+          value={this.state.namespaces.includes(this.state.query[key]) ? this.state.query[key] : ""}
           onChange={this.handleNamespaceSelect(key)}
           inputProps={{
             name: key,
@@ -290,7 +302,7 @@ class TopRoutes extends React.Component {
       <FormControl className={classes.formControl}>
         <InputLabel htmlFor={`${nameKey}-dropdown`}>{title}</InputLabel>
         <Select
-          value={dropdownVal}
+          value={dropdownOptions.includes(dropdownVal) ? dropdownVal : ""}
           onChange={this.handleResourceSelect(nameKey, typeKey)}
           disabled={_isEmpty(query.namespace)}
           inputProps={{
@@ -320,7 +332,7 @@ class TopRoutes extends React.Component {
           !this.state.error ? null :
           <ErrorBanner message={this.state.error} onHideMessage={() => this.setState({ error: null })} />
         }
-        <Card>
+        <Card elevation={3}>
           { this.renderRoutesQueryForm() }
           {
             emptyQuery ? null :
@@ -336,4 +348,4 @@ class TopRoutes extends React.Component {
   }
 }
 
-export default withQueryParams(topRoutesQueryConfig, (withContext(withStyles(styles, { withTheme: true })(TopRoutes))));
+export default withPageVisibility(withQueryParams(topRoutesQueryConfig, (withContext(withStyles(styles, { withTheme: true })(TopRoutes)))));
