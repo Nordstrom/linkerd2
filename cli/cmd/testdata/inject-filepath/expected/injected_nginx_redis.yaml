@@ -1,20 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  creationTimestamp: null
   name: redis
 spec:
   selector:
     matchLabels:
       app: redis
-  strategy: {}
   template:
     metadata:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
         linkerd.io/proxy-version: install-proxy-version
-      creationTimestamp: null
       labels:
         app: redis
         linkerd.io/control-plane-ns: linkerd
@@ -26,10 +23,9 @@ spec:
         ports:
         - containerPort: 6379
           name: server
-        resources: {}
       - env:
         - name: LINKERD2_PROXY_LOG
-          value: warn,linkerd2_proxy=info
+          value: warn,linkerd=info
         - name: LINKERD2_PROXY_DESTINATION_SVC_ADDR
           value: linkerd-dst.linkerd.svc.cluster.local:8086
         - name: LINKERD2_PROXY_CONTROL_LISTEN_ADDR
@@ -106,7 +102,6 @@ spec:
             path: /ready
             port: 4191
           initialDelaySeconds: 2
-        resources: {}
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -125,7 +120,7 @@ spec:
         - "2102"
         - --inbound-ports-to-ignore
         - 4190,4191
-        image: gcr.io/linkerd-io/proxy-init:v1.2.0
+        image: gcr.io/linkerd-io/proxy-init:v1.3.0
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -150,25 +145,21 @@ spec:
       - emptyDir:
           medium: Memory
         name: linkerd-identity-end-entity
-status: {}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  creationTimestamp: null
   name: nginx
 spec:
   selector:
     matchLabels:
       app: nginx
-  strategy: {}
   template:
     metadata:
       annotations:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
         linkerd.io/proxy-version: install-proxy-version
-      creationTimestamp: null
       labels:
         app: nginx
         linkerd.io/control-plane-ns: linkerd
@@ -180,10 +171,9 @@ spec:
         ports:
         - containerPort: 80
           name: http
-        resources: {}
       - env:
         - name: LINKERD2_PROXY_LOG
-          value: warn,linkerd2_proxy=info
+          value: warn,linkerd=info
         - name: LINKERD2_PROXY_DESTINATION_SVC_ADDR
           value: linkerd-dst.linkerd.svc.cluster.local:8086
         - name: LINKERD2_PROXY_CONTROL_LISTEN_ADDR
@@ -260,7 +250,6 @@ spec:
             path: /ready
             port: 4191
           initialDelaySeconds: 2
-        resources: {}
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -279,7 +268,7 @@ spec:
         - "2102"
         - --inbound-ports-to-ignore
         - 4190,4191
-        image: gcr.io/linkerd-io/proxy-init:v1.2.0
+        image: gcr.io/linkerd-io/proxy-init:v1.3.0
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -304,5 +293,4 @@ spec:
       - emptyDir:
           medium: Memory
         name: linkerd-identity-end-entity
-status: {}
 ---

@@ -41,84 +41,90 @@ func TestRender(t *testing.T) {
 		t.Fatalf("Unexpected error: %v\n", err)
 	}
 
-	identityContext := toIdentityContext(&charts.Identity{
-		Issuer: &charts.Issuer{
-			ClockSkewAllowance: "20s",
-			IssuanceLifetime:   "86400s",
-		},
+	identityContext := toIdentityContext(&identityWithAnchorsAndTrustDomain{
 		TrustAnchorsPEM: "test-trust-anchor",
+		Identity: &charts.Identity{
+			Issuer: &charts.Issuer{
+				ClockSkewAllowance: "20s",
+				IssuanceLifetime:   "86400s",
+			},
+		},
 	})
 	metaConfig := metaOptions.configs(identityContext)
 	metaConfig.Global.LinkerdNamespace = "Namespace"
 	metaValues := &charts.Values{
-		Namespace:                   "Namespace",
-		ClusterDomain:               "cluster.local",
 		ControllerImage:             "ControllerImage",
 		ControllerImageVersion:      "ControllerImageVersion",
 		WebImage:                    "WebImage",
 		PrometheusImage:             "PrometheusImage",
 		GrafanaImage:                "GrafanaImage",
-		ImagePullPolicy:             "ImagePullPolicy",
-		CliVersion:                  "CliVersion",
 		ControllerLogLevel:          "ControllerLogLevel",
 		PrometheusLogLevel:          "PrometheusLogLevel",
-		ControllerComponentLabel:    "ControllerComponentLabel",
-		ControllerNamespaceLabel:    "ControllerNamespaceLabel",
-		CreatedByAnnotation:         "CreatedByAnnotation",
-		ProxyContainerName:          "ProxyContainerName",
-		ProxyInjectAnnotation:       "ProxyInjectAnnotation",
-		ProxyInjectDisabled:         "ProxyInjectDisabled",
-		LinkerdNamespaceLabel:       "LinkerdNamespaceLabel",
 		ControllerUID:               2103,
 		EnableH2Upgrade:             true,
-		NoInitContainer:             false,
 		WebhookFailurePolicy:        "WebhookFailurePolicy",
 		OmitWebhookSideEffects:      false,
 		RestrictDashboardPrivileges: false,
 		InstallNamespace:            true,
+		Identity:                    defaultValues.Identity,
 		NodeSelector:                defaultValues.NodeSelector,
+		Global: &charts.Global{
+			Namespace:                "Namespace",
+			ClusterDomain:            "cluster.local",
+			ImagePullPolicy:          "ImagePullPolicy",
+			CliVersion:               "CliVersion",
+			ControllerComponentLabel: "ControllerComponentLabel",
+			ControllerNamespaceLabel: "ControllerNamespaceLabel",
+			CreatedByAnnotation:      "CreatedByAnnotation",
+			ProxyInjectAnnotation:    "ProxyInjectAnnotation",
+			ProxyInjectDisabled:      "ProxyInjectDisabled",
+			LinkerdNamespaceLabel:    "LinkerdNamespaceLabel",
+			ProxyContainerName:       "ProxyContainerName",
+			NoInitContainer:          false,
+			IdentityTrustDomain:      defaultValues.Global.IdentityTrustDomain,
+			IdentityTrustAnchorsPEM:  defaultValues.Global.IdentityTrustAnchorsPEM,
+			Proxy: &charts.Proxy{
+				Image: &charts.Image{
+					Name:       "ProxyImageName",
+					PullPolicy: "ImagePullPolicy",
+					Version:    "ProxyVersion",
+				},
+				LogLevel: "warn,linkerd=info",
+				Ports: &charts.Ports{
+					Admin:    4191,
+					Control:  4190,
+					Inbound:  4143,
+					Outbound: 4140,
+				},
+				UID: 2102,
+			},
+			ProxyInit: &charts.ProxyInit{
+				Image: &charts.Image{
+					Name:       "ProxyInitImageName",
+					PullPolicy: "ImagePullPolicy",
+					Version:    "ProxyInitVersion",
+				},
+				Resources: &charts.Resources{
+					CPU: charts.Constraints{
+						Limit:   "100m",
+						Request: "10m",
+					},
+					Memory: charts.Constraints{
+						Limit:   "50Mi",
+						Request: "10Mi",
+					},
+				},
+			},
+		},
 		Configs: charts.ConfigJSONs{
 			Global:  "GlobalConfig",
 			Proxy:   "ProxyConfig",
 			Install: "InstallConfig",
 		},
 		ControllerReplicas: 1,
-		Identity:           defaultValues.Identity,
 		ProxyInjector:      defaultValues.ProxyInjector,
 		ProfileValidator:   defaultValues.ProfileValidator,
 		Tap:                defaultValues.Tap,
-		Proxy: &charts.Proxy{
-			Image: &charts.Image{
-				Name:       "ProxyImageName",
-				PullPolicy: "ImagePullPolicy",
-				Version:    "ProxyVersion",
-			},
-			LogLevel: "warn,linkerd2_proxy=info",
-			Ports: &charts.Ports{
-				Admin:    4191,
-				Control:  4190,
-				Inbound:  4143,
-				Outbound: 4140,
-			},
-			UID: 2102,
-		},
-		ProxyInit: &charts.ProxyInit{
-			Image: &charts.Image{
-				Name:       "ProxyInitImageName",
-				PullPolicy: "ImagePullPolicy",
-				Version:    "ProxyInitVersion",
-			},
-			Resources: &charts.Resources{
-				CPU: charts.Constraints{
-					Limit:   "100m",
-					Request: "10m",
-				},
-				Memory: charts.Constraints{
-					Limit:   "50Mi",
-					Request: "10Mi",
-				},
-			},
-		},
 		Dashboard: &charts.Dashboard{
 			Replicas: 1,
 		},
@@ -162,6 +168,39 @@ func TestRender(t *testing.T) {
 	noInitContainerValues, _, _ := noInitContainerOptions.validateAndBuild("", nil)
 	addFakeTLSSecrets(noInitContainerValues)
 
+	withProxyIgnoresOptions, err := testInstallOptions()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\n", err)
+	}
+	withProxyIgnoresOptions.ignoreInboundPorts = []string{"22", "8100-8102"}
+	withProxyIgnoresOptions.ignoreOutboundPorts = []string{"5432"}
+	withProxyIgnoresValues, _, _ := withProxyIgnoresOptions.validateAndBuild("", nil)
+	addFakeTLSSecrets(withProxyIgnoresValues)
+
+	withHeartBeatDisabled, err := testInstallOptions()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\n", err)
+	}
+	withHeartBeatDisabled.disableHeartbeat = true
+	withHeartBeatDisabledValues, _, _ := withHeartBeatDisabled.validateAndBuild("", nil)
+	addFakeTLSSecrets(withHeartBeatDisabledValues)
+
+	withRestrictedDashboardPriviliges, err := testInstallOptions()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\n", err)
+	}
+	withRestrictedDashboardPriviliges.restrictDashboardPrivileges = true
+	withRestrictedDashboardPriviligesValues, _, _ := withRestrictedDashboardPriviliges.validateAndBuild("", nil)
+	addFakeTLSSecrets(withRestrictedDashboardPriviligesValues)
+
+	withControlPlaneTracing, err := testInstallOptions()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\n", err)
+	}
+	withControlPlaneTracing.controlPlaneTracing = true
+	withControlPlaneTracingValues, _, _ := withControlPlaneTracing.validateAndBuild("", nil)
+	addFakeTLSSecrets(withControlPlaneTracingValues)
+
 	testCases := []struct {
 		values         *charts.Values
 		goldenFileName string
@@ -173,6 +212,10 @@ func TestRender(t *testing.T) {
 		{haValues, "install_ha_output.golden"},
 		{haWithOverridesValues, "install_ha_with_overrides_output.golden"},
 		{noInitContainerValues, "install_no_init_container.golden"},
+		{withProxyIgnoresValues, "install_proxy_ignores.golden"},
+		{withHeartBeatDisabledValues, "install_heartbeat_disabled_output.golden"},
+		{withRestrictedDashboardPriviligesValues, "install_restricted_dashboard.golden"},
+		{withControlPlaneTracingValues, "install_controlplane_tracing_output.golden"},
 	}
 
 	for i, tc := range testCases {
@@ -185,6 +228,32 @@ func TestRender(t *testing.T) {
 			diffTestdata(t, tc.goldenFileName, buf.String())
 		})
 	}
+}
+
+func TestValidateAndBuild_Errors(t *testing.T) {
+	t.Run("Fails validation for invalid ignoreInboundPorts", func(t *testing.T) {
+		installOptions, err := testInstallOptions()
+		if err != nil {
+			t.Fatalf("Unexpected error: %v\n", err)
+		}
+		installOptions.ignoreInboundPorts = []string{"-25"}
+		_, _, err = installOptions.validateAndBuild("", nil)
+		if err == nil {
+			t.Fatal("expected error but got nothing")
+		}
+	})
+
+	t.Run("Fails validation for invalid ignoreOutboundPorts", func(t *testing.T) {
+		installOptions, err := testInstallOptions()
+		if err != nil {
+			t.Fatalf("Unexpected error: %v\n", err)
+		}
+		installOptions.ignoreOutboundPorts = []string{"-25"}
+		_, _, err = installOptions.validateAndBuild("", nil)
+		if err == nil {
+			t.Fatal("expected error but got nothing")
+		}
+	})
 }
 
 func testInstallOptions() (*installOptions, error) {
@@ -271,8 +340,8 @@ func TestValidate(t *testing.T) {
 			{"linkerd2%proxy=debug", false},
 			{"linkerd2_proxy=foobar", false},
 			{"linker2d_proxy,std::option", true},
-			{"warn,linkerd2_proxy=info", true},
-			{"warn,linkerd2_proxy=foobar", false},
+			{"warn,linkerd=info", true},
+			{"warn,linkerd=foobar", false},
 		}
 
 		options, err := testInstallOptions()

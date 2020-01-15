@@ -1,10 +1,12 @@
 package healthcheck
 
 import (
+	"bufio"
 	"context"
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,10 +28,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	yamlDecoder "k8s.io/apimachinery/pkg/util/yaml"
 	k8sVersion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/yaml"
 )
 
 // CategoryID is an identifier for the types of health checks.
@@ -123,6 +128,10 @@ const (
 	// from LinkerdVersionChecks, so those checks must be added first.
 	LinkerdDataPlaneChecks CategoryID = "linkerd-data-plane"
 
+	// LinkerdHAChecks adds checks to validate that the HA configuration
+	// is correct. These checks are no ops if linkerd is not in HA mode
+	LinkerdHAChecks CategoryID = "linkerd-ha-checks"
+
 	// linkerdCniResourceLabel is the label key that is used to identify
 	// whether a Kubernetes resource is related to the install-cni command
 	// The value is expected to be "true", "false" or "", where "false" and
@@ -211,6 +220,16 @@ func IsCategoryError(err error, categoryID CategoryID) bool {
 	return false
 }
 
+// SkipError is returned by a check in case this check needs to be ignored.
+type SkipError struct {
+	Reason string
+}
+
+// Error satisfies the error interface for SkipError.
+func (e *SkipError) Error() string {
+	return e.Reason
+}
+
 type checker struct {
 	// description is the short description that's printed to the command line
 	// when the check is executed
@@ -280,6 +299,7 @@ type Options struct {
 	VersionOverride       string
 	RetryDeadline         time.Time
 	NoInitContainer       bool
+	InstallManifest       string
 }
 
 // HealthChecker encapsulates all health check checkers, and clients required to
@@ -388,38 +408,10 @@ func (hc *HealthChecker) allCategories() []category {
 					},
 				},
 				{
-					description: "can create Namespaces",
+					description: "can create non-namespaced resources",
 					hintAnchor:  "pre-k8s-cluster-k8s",
 					check: func(context.Context) error {
-						return hc.checkCanCreate("", "", "v1", "namespaces")
-					},
-				},
-				{
-					description: "can create ClusterRoles",
-					hintAnchor:  "pre-k8s-cluster-k8s",
-					check: func(context.Context) error {
-						return hc.checkCanCreate("", "rbac.authorization.k8s.io", "v1beta1", "clusterroles")
-					},
-				},
-				{
-					description: "can create ClusterRoleBindings",
-					hintAnchor:  "pre-k8s-cluster-k8s",
-					check: func(context.Context) error {
-						return hc.checkCanCreate("", "rbac.authorization.k8s.io", "v1beta1", "clusterrolebindings")
-					},
-				},
-				{
-					description: "can create CustomResourceDefinitions",
-					hintAnchor:  "pre-k8s-cluster-k8s",
-					check: func(context.Context) error {
-						return hc.checkCanCreate("", "apiextensions.k8s.io", "v1beta1", "customresourcedefinitions")
-					},
-				},
-				{
-					description: "can create PodSecurityPolicies",
-					hintAnchor:  "pre-k8s",
-					check: func(context.Context) error {
-						return hc.checkCanCreate(hc.ControlPlaneNamespace, "policy", "v1beta1", "podsecuritypolicies")
+						return hc.checkCanCreateNonNamespacedResources()
 					},
 				},
 				{
@@ -714,7 +706,7 @@ func (hc *HealthChecker) allCategories() []category {
 			checkers: []checker{
 				{
 					description: "certificate config is valid",
-					hintAnchor:  "l5d-crt-config-is-valid",
+					hintAnchor:  "l5d-identity-cert-config-valid",
 					fatal:       true,
 					check: func(context.Context) (err error) {
 						hc.issuerCert, hc.roots, err = hc.checkCertificatesConfig()
@@ -723,7 +715,7 @@ func (hc *HealthChecker) allCategories() []category {
 				},
 				{
 					description: "trust roots are using supported crypto algorithm",
-					hintAnchor:  "l5d-supported-certs-type",
+					hintAnchor:  "l5d-identity-roots-use-supported-crypto",
 					fatal:       true,
 					check: func(context.Context) error {
 						var invalidRoots []string
@@ -740,7 +732,7 @@ func (hc *HealthChecker) allCategories() []category {
 				},
 				{
 					description: "trust roots are within their validity period",
-					hintAnchor:  "l5d-certs-rotation",
+					hintAnchor:  "l5d-identity-roots-are-time-valid",
 					fatal:       true,
 					check: func(ctx context.Context) error {
 						var expiredRoots []string
@@ -758,7 +750,7 @@ func (hc *HealthChecker) allCategories() []category {
 				},
 				{
 					description: "trust roots are valid for at least 60 days",
-					hintAnchor:  "l5d-certs-rotation",
+					hintAnchor:  "l5d-identity-roots-not-expiring-soon",
 					warning:     true,
 					check: func(ctx context.Context) error {
 						var expiringRoots []string
@@ -775,7 +767,7 @@ func (hc *HealthChecker) allCategories() []category {
 				},
 				{
 					description: "issuer cert is using supported crypto algorithm",
-					hintAnchor:  "l5d-supported-certs-type",
+					hintAnchor:  "l5d-identity-issuer-cert-uses-supported-crypto",
 					fatal:       true,
 					check: func(context.Context) error {
 						if err := issuercerts.CheckCertAlgoRequirements(hc.issuerCert.Certificate); err != nil {
@@ -786,7 +778,7 @@ func (hc *HealthChecker) allCategories() []category {
 				},
 				{
 					description: "issuer cert is within its validity period",
-					hintAnchor:  "l5d-certs-rotation",
+					hintAnchor:  "l5d-identity-issuer-cert-is-time-valid",
 					fatal:       true,
 					check: func(ctx context.Context) error {
 						if err := issuercerts.CheckCertValidityPeriod(hc.issuerCert.Certificate); err != nil {
@@ -798,7 +790,7 @@ func (hc *HealthChecker) allCategories() []category {
 				{
 					description: "issuer cert is valid for at least 60 days",
 					warning:     true,
-					hintAnchor:  "l5d-certs-rotation",
+					hintAnchor:  "l5d-identity-issuer-cert-not-expiring-soon",
 					check: func(context.Context) error {
 						if err := issuercerts.CheckExpiringSoon(hc.issuerCert.Certificate); err != nil {
 							return fmt.Errorf("issuer certificate %s", err)
@@ -808,7 +800,7 @@ func (hc *HealthChecker) allCategories() []category {
 				},
 				{
 					description: "issuer cert is issued by the trust root",
-					hintAnchor:  "l5d-certs-rotation",
+					hintAnchor:  "l5d-identity-issuer-cert-issued-by-trust-root",
 					check: func(ctx context.Context) error {
 						return hc.issuerCert.Verify(tls.CertificatesToPool(hc.roots), hc.issuerIdentity())
 					},
@@ -820,7 +812,7 @@ func (hc *HealthChecker) allCategories() []category {
 			checkers: []checker{
 				{
 					description: "data plane proxies certificate match CA",
-					hintAnchor:  "l5d-data-plane-proxies-certificate-match-ca",
+					hintAnchor:  "l5d-identity-data-plane-proxies-certs-match-ca",
 					warning:     true,
 					check: func(ctx context.Context) error {
 						return hc.checkDataPlaneProxiesCertificate()
@@ -991,6 +983,22 @@ func (hc *HealthChecker) allCategories() []category {
 				},
 			},
 		},
+		{
+			id: LinkerdHAChecks,
+			checkers: []checker{
+				{
+					description: "pod injection disabled on kube-system",
+					hintAnchor:  "l5d-injection-disabled",
+					warning:     true,
+					check: func(context.Context) error {
+						if hc.isHA() {
+							return hc.checkHAMetadataPresentOnKubeSystemNamespace()
+						}
+						return &SkipError{Reason: "not run for non HA installs"}
+					},
+				},
+			},
+		},
 	}
 }
 
@@ -1067,6 +1075,10 @@ func (hc *HealthChecker) runCheck(categoryID CategoryID, c *checker, observer Ch
 		ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 		defer cancel()
 		err := c.check(ctx)
+		if se, ok := err.(*SkipError); ok {
+			log.Debugf("Skipping check: %s. Reason: %s", c.description, se.Reason)
+			return true
+		}
 		if err != nil {
 			err = &CategoryError{categoryID, err}
 		}
@@ -1099,6 +1111,10 @@ func (hc *HealthChecker) runCheckRPC(categoryID CategoryID, c *checker, observer
 	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
 	defer cancel()
 	checkRsp, err := c.checkRPC(ctx)
+	if se, ok := err.(*SkipError); ok {
+		log.Debugf("Skipping check: %s. Reason: %s", c.description, se.Reason)
+		return true
+	}
 	if err != nil {
 		err = &CategoryError{categoryID, err}
 	}
@@ -1285,6 +1301,15 @@ func (hc *HealthChecker) checkClusterRoleBindings(shouldExist bool) error {
 	}
 
 	return checkResources("ClusterRoleBindings", objects, hc.expectedRBACNames(), shouldExist)
+}
+
+func (hc *HealthChecker) isHA() bool {
+	for _, flag := range hc.linkerdConfig.GetInstall().GetFlags() {
+		if flag.GetName() == "ha" && flag.GetValue() == "true" {
+			return true
+		}
+	}
+	return false
 }
 
 func (hc *HealthChecker) isHeartbeatDisabled() bool {
@@ -1548,8 +1573,70 @@ func (hc *HealthChecker) checkCanPerformAction(verb, namespace, group, version, 
 	)
 }
 
+func (hc *HealthChecker) checkHAMetadataPresentOnKubeSystemNamespace() error {
+	ns, err := hc.kubeAPI.CoreV1().Namespaces().Get("kube-system", metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	val, ok := ns.Labels[k8s.AdmissionWebhookLabel]
+	if !ok || val != "disabled" {
+		return fmt.Errorf("kube-system namespace needs to have the label %s: disabled if HA mode is enabled", k8s.AdmissionWebhookLabel)
+	}
+
+	return nil
+}
+
 func (hc *HealthChecker) checkCanCreate(namespace, group, version, resource string) error {
 	return hc.checkCanPerformAction("create", namespace, group, version, resource)
+}
+
+func (hc *HealthChecker) checkCanCreateNonNamespacedResources() error {
+	var errs []string
+	dryRun := metav1.CreateOptions{DryRun: []string{metav1.DryRunAll}}
+
+	// Iterate over all resources in install manifest
+	installManifestReader := strings.NewReader(hc.Options.InstallManifest)
+	yamlReader := yamlDecoder.NewYAMLReader(bufio.NewReader(installManifestReader))
+	for {
+		// Read single object YAML
+		objYAML, err := yamlReader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("error reading install manifest: %v", err)
+		}
+
+		// Create unstructured object from YAML
+		objMap := map[string]interface{}{}
+		err = yaml.Unmarshal(objYAML, &objMap)
+		if err != nil {
+			return fmt.Errorf("error unmarshaling yaml object %s: %v", objYAML, err)
+		}
+		if len(objMap) == 0 {
+			// Ignore header blocks with only comments
+			continue
+		}
+		obj := &unstructured.Unstructured{Object: objMap}
+
+		// Skip namespaced resources (dry-run requires namespace to exist)
+		if obj.GetNamespace() != "" {
+			continue
+		}
+
+		// Attempt to create resource using dry-run
+		resource, _ := meta.UnsafeGuessKindToResource(obj.GroupVersionKind())
+		_, err = hc.kubeAPI.DynamicClient.Resource(resource).Create(obj, dryRun)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("cannot create %s/%s: %v", obj.GetKind(), obj.GetName(), err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.New(strings.Join(errs, "\n    "))
+	}
+	return nil
 }
 
 func (hc *HealthChecker) checkCanGet(namespace, group, version, resource string) error {

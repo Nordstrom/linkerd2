@@ -59,9 +59,10 @@ var (
 	// Linkerd commonly logs these errors during testing, remove these once
 	// they're addressed: https://github.com/linkerd/linkerd2/issues/2453
 	knownControllerErrorsRegex = regexp.MustCompile(strings.Join([]string{
-		`.* linkerd-controller-.*-.* tap time=".*" level=error msg="\[.*\] encountered an error: rpc error: code = Canceled desc = context canceled"`,
-		`.* linkerd-web-.*-.* web time=".*" level=error msg="Post http://linkerd-controller-api\..*\.svc\.cluster\.local:8085/api/v1/Version: context canceled"`,
-		`.* linkerd-proxy-injector-.*-.* proxy-injector time=".*" level=warning msg="failed to retrieve replicaset from indexer, retrying with get request .*-smoke-test.*/smoke-test-.*-.*: replicaset\.apps \\"smoke-test-.*-.*\\" not found"`,
+		`.*linkerd-controller-.*-.* tap time=".*" level=error msg="\[.*\] encountered an error: rpc error: code = Canceled desc = context canceled"`,
+		`.*linkerd-web-.*-.* web time=".*" level=error msg="Post http://linkerd-controller-api\..*\.svc\.cluster\.local:8085/api/v1/Version: context canceled"`,
+		`.*linkerd-proxy-injector-.*-.* proxy-injector time=".*" level=warning msg="failed to retrieve replicaset from indexer .*-smoke-test.*/smoke-test-.*-.*: replicaset\.apps \\"smoke-test-.*-.*\\" not found"`,
+		`.*linkerd-destination-.* destination time=".*" level=warning msg="failed to retrieve replicaset from indexer .* not found"`,
 	}, "|"))
 
 	knownProxyErrorsRegex = regexp.MustCompile(strings.Join([]string{
@@ -83,7 +84,8 @@ var (
 	}, "|"))
 
 	knownEventWarningsRegex = regexp.MustCompile(strings.Join([]string{
-		`MountVolume.SetUp failed for volume .* : couldn't propagate object cache: timed out waiting for the condition`,
+		`MountVolume.SetUp failed for volume .* : couldn't propagate object cache: timed out waiting for the condition`, // pre k8s 1.16
+		`MountVolume.SetUp failed for volume .* : failed to sync .* cache: timed out waiting for the condition`,         // post k8s 1.16
 		`(Liveness|Readiness) probe failed: HTTP probe failed with statuscode: 50(2|3)`,
 		`(Liveness|Readiness) probe failed: Get http://.*: dial tcp .*: connect: connection refused`,
 		`(Liveness|Readiness) probe failed: Get http://.*: read tcp .*: read: connection reset by peer`,
@@ -145,9 +147,9 @@ func TestCheckPreInstall(t *testing.T) {
 
 	cmd := []string{"check", "--pre", "--expected-version", TestHelper.GetVersion()}
 	golden := "check.pre.golden"
-	out, _, err := TestHelper.LinkerdRun(cmd...)
+	out, stderr, err := TestHelper.LinkerdRun(cmd...)
 	if err != nil {
-		t.Fatalf("Check command failed\n%s", out)
+		t.Fatalf("Check command failed\n%s\n%s", out, stderr)
 	}
 
 	err = TestHelper.ValidateOutput(out, golden)
@@ -251,7 +253,7 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		crt2, err := root.GenerateCA(identity, root.Validity, -1)
+		crt2, err := root.GenerateCA(identity, -1)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -269,9 +271,9 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 
 		cmd = "upgrade"
 		// test 2-stage install during upgrade
-		out, _, err := TestHelper.LinkerdRun(cmd, "config")
+		out, stderr, err := TestHelper.LinkerdRun(cmd, "config")
 		if err != nil {
-			t.Fatalf("linkerd upgrade config command failed\n%s", out)
+			t.Fatalf("linkerd upgrade config command failed\n%s\n%s", out, stderr)
 		}
 
 		// apply stage 1
@@ -287,7 +289,7 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 	exec := append([]string{cmd}, args...)
 	out, stderr, err := TestHelper.LinkerdRun(exec...)
 	if err != nil {
-		t.Fatalf("linkerd install command failed: \n%s\n%s\n%s", out, stderr, out)
+		t.Fatalf("linkerd install command failed: \n%s\n%s", out, stderr)
 	}
 
 	// test `linkerd upgrade --from-manifests`
@@ -309,9 +311,9 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 		if out != upgradeFromManifests {
 			// retry in case it's just a discrepancy in the heartbeat cron schedule
 			exec := append([]string{cmd}, args...)
-			out, _, err := TestHelper.LinkerdRun(exec...)
+			out, stderr, err := TestHelper.LinkerdRun(exec...)
 			if err != nil {
-				t.Fatalf("command failed: %v\n%s", exec, out)
+				t.Fatalf("command failed: %v\n%s\n%s", exec, out, stderr)
 			}
 
 			if out != upgradeFromManifests {
@@ -340,10 +342,10 @@ func TestInstallHelm(t *testing.T) {
 
 	args := []string{
 		"--set", "controllerLogLevel=debug",
-		"--set", "linkerdVersion=" + TestHelper.GetVersion(),
-		"--set", "proxy.image.version=" + TestHelper.GetVersion(),
-		"--set", "identity.trustDomain=cluster.local",
-		"--set", "identity.trustAnchorsPEM=" + root.Cred.Crt.EncodeCertificatePEM(),
+		"--set", "global.linkerdVersion=" + TestHelper.GetVersion(),
+		"--set", "global.proxy.image.version=" + TestHelper.GetVersion(),
+		"--set", "global.identityTrustDomain=cluster.local",
+		"--set", "global.identityTrustAnchorsPEM=" + root.Cred.Crt.EncodeCertificatePEM(),
 		"--set", "identity.issuer.tls.crtPEM=" + root.Cred.Crt.EncodeCertificatePEM(),
 		"--set", "identity.issuer.tls.keyPEM=" + root.Cred.EncodePrivateKeyPEM(),
 		"--set", "identity.issuer.crtExpiry=" + root.Cred.Crt.Certificate.NotAfter.Format(time.RFC3339),
@@ -460,9 +462,9 @@ func TestUpgradeTestAppWorksAfterUpgrade(t *testing.T) {
 func TestInstallSP(t *testing.T) {
 	cmd := []string{"install-sp"}
 
-	out, _, err := TestHelper.LinkerdRun(cmd...)
+	out, stderr, err := TestHelper.LinkerdRun(cmd...)
 	if err != nil {
-		t.Fatalf("linkerd install-sp command failed\n%s", out)
+		t.Fatalf("linkerd install-sp command failed\n%s\n%s", out, stderr)
 	}
 
 	out, err = TestHelper.KubectlApply(out, TestHelper.GetLinkerdNamespace())
@@ -605,9 +607,9 @@ func TestCheckProxy(t *testing.T) {
 			golden := "check.proxy.golden"
 
 			err := TestHelper.RetryFor(time.Minute, func() error {
-				out, _, err := TestHelper.LinkerdRun(cmd...)
+				out, stderr, err := TestHelper.LinkerdRun(cmd...)
 				if err != nil {
-					return fmt.Errorf("Check command failed\n%s", out)
+					return fmt.Errorf("Check command failed\n%s\n%s", out, stderr)
 				}
 
 				err = TestHelper.ValidateOutput(out, golden)

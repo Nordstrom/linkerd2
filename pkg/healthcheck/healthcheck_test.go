@@ -178,6 +178,32 @@ func TestHealthChecker(t *testing.T) {
 		},
 	}
 
+	skippingCheck := category{
+		id: "cat7",
+		checkers: []checker{
+			{
+				description: "skip",
+				check: func(context.Context) error {
+					return &SkipError{Reason: "needs skipping"}
+				},
+				retryDeadline: time.Time{},
+			},
+		},
+	}
+
+	skippingRPCCheck := category{
+		id: "cat8",
+		checkers: []checker{
+			{
+				description: "skipRpc",
+				checkRPC: func(context.Context) (*healthcheckPb.SelfCheckResponse, error) {
+					return nil, &SkipError{Reason: "needs skipping"}
+				},
+				retryDeadline: time.Time{},
+			},
+		},
+	}
+
 	t.Run("Notifies observer of all results", func(t *testing.T) {
 		hc := NewHealthChecker(
 			[]CategoryID{},
@@ -324,6 +350,27 @@ func TestHealthChecker(t *testing.T) {
 
 		if !reflect.DeepEqual(observedResults, expectedResults) {
 			t.Fatalf("Expected results %v, but got %v", expectedResults, observedResults)
+		}
+	})
+
+	t.Run("Does not notify observer of skipped checks", func(t *testing.T) {
+		hc := NewHealthChecker(
+			[]CategoryID{},
+			&Options{},
+		)
+		hc.addCategory(passingCheck1)
+		hc.addCategory(skippingCheck)
+		hc.addCategory(skippingRPCCheck)
+
+		expectedResults := []string{
+			"cat1 desc1",
+		}
+
+		obs := newObserver()
+		hc.RunChecks(obs.resultFn)
+
+		if !reflect.DeepEqual(obs.results, expectedResults) {
+			t.Fatalf("Expected results %v, but got %v", expectedResults, obs.results)
 		}
 	})
 }
@@ -2129,6 +2176,92 @@ metadata:
 	})
 }
 
+func getConfigAndKubeSystemNamespace(ha bool, nsLabel string) []string {
+	return []string{fmt.Sprintf(`
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: linkerd-config
+  namespace: linkerd
+data:
+  install: |
+    {"cliVersion":"dev-undefined","flags":[{"name":"ha","value":"%v"}]}`, ha),
+		fmt.Sprintf(`
+apiVersion: v1
+kind: Namespace
+metadata:
+  creationTimestamp: null
+  labels:
+    %s
+  name: kube-system`, nsLabel),
+	}
+}
+
+func TestKubeSystemNamespaceInHA(t *testing.T) {
+	testCases := []struct {
+		testDescription string
+		k8sConfigs      []string
+		expectedOutput  string
+	}{
+		{
+			"passes when HA is not enabled",
+			getConfigAndKubeSystemNamespace(false, ""),
+			"",
+		},
+		{
+			"passes when HA is enabled and namespace has required metadata",
+			getConfigAndKubeSystemNamespace(true, "config.linkerd.io/admission-webhooks: disabled"),
+			"l5d-injection-disabled pod injection disabled on kube-system",
+		},
+		{
+			"fails when HA and admission hooks are enabled",
+			getConfigAndKubeSystemNamespace(true, "config.linkerd.io/admission-webhooks: enabled"),
+			"l5d-injection-disabled pod injection disabled on kube-system: kube-system namespace needs to have the label config.linkerd.io/admission-webhooks: disabled if HA mode is enabled",
+		},
+		{
+			"fails when HA is enabled and metadata is missing",
+			getConfigAndKubeSystemNamespace(true, ""),
+			"l5d-injection-disabled pod injection disabled on kube-system: kube-system namespace needs to have the label config.linkerd.io/admission-webhooks: disabled if HA mode is enabled",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc // pin
+		t.Run(tc.testDescription, func(t *testing.T) {
+
+			hc := NewHealthChecker([]CategoryID{}, &Options{})
+			hc.ControlPlaneNamespace = "linkerd"
+
+			var err error
+			hc.kubeAPI, _ = k8s.NewFakeAPI(tc.k8sConfigs...)
+			_, hc.linkerdConfig, err = hc.checkLinkerdConfigConfigMap()
+			if err != nil {
+				t.Fatalf("Unexpected error: %q", err)
+			}
+
+			hc.addCheckAsCategory("l5d-injection-disabled", LinkerdHAChecks, "pod injection disabled on kube-system")
+
+			obs := newObserver()
+			hc.RunChecks(obs.resultFn)
+
+			if tc.expectedOutput == "" {
+				if len(obs.results) != 0 {
+					t.Fatalf("Expected not output, but got %v", obs.results)
+				}
+			} else {
+				expectedResults := []string{
+					tc.expectedOutput,
+				}
+
+				if !reflect.DeepEqual(obs.results, expectedResults) {
+					t.Fatalf("Expected results %v, but got %v", expectedResults, obs.results)
+				}
+			}
+		})
+	}
+
+}
+
 func TestFetchLinkerdConfigMap(t *testing.T) {
 	testCases := []struct {
 		k8sConfigs []string
@@ -2146,7 +2279,7 @@ data:
   global: |
     {"linkerdNamespace":"linkerd","cniEnabled":false,"version":"install-control-plane-version","identityContext":{"trustDomain":"cluster.local","trustAnchorsPem":"fake-trust-anchors-pem","issuanceLifetime":"86400s","clockSkewAllowance":"20s"}}
   proxy: |
-    {"proxyImage":{"imageName":"gcr.io/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"gcr.io/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"","requestMemory":"","limitCpu":"","limitMemory":""},"proxyUid":"2102","logLevel":{"level":"warn,linkerd2_proxy=info"},"disableExternalProfiles":true,"proxyVersion":"install-proxy-version", "proxy_init_image_version":"v1.2.0"}
+    {"proxyImage":{"imageName":"gcr.io/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"gcr.io/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"","requestMemory":"","limitCpu":"","limitMemory":""},"proxyUid":"2102","logLevel":{"level":"warn,linkerd=info"},"disableExternalProfiles":true,"proxyVersion":"install-proxy-version", "proxy_init_image_version":"v1.3.0"}
   install: |
     {"cliVersion":"dev-undefined","flags":[]}`,
 			},
@@ -2188,11 +2321,11 @@ data:
 					Resource: &configPb.ResourceRequirements{},
 					ProxyUid: 2102,
 					LogLevel: &configPb.LogLevel{
-						Level: "warn,linkerd2_proxy=info",
+						Level: "warn,linkerd=info",
 					},
 					DisableExternalProfiles: true,
 					ProxyVersion:            "install-proxy-version",
-					ProxyInitImageVersion:   "v1.2.0",
+					ProxyInitImageVersion:   "v1.3.0",
 				}, Install: &configPb.Install{
 					CliVersion: "dev-undefined",
 				}},

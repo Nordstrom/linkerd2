@@ -8,30 +8,28 @@ on:
     tags:
     - "*"
 
-## Jobs by event type and dependencies:
+# Jobs by event type and dependencies:
 
-# Unit tests for every master/tag push and PR:
+# Unit tests for every master/tag push and PR
 #
-# download_src
-#   -> validate_go_deps
-#   -> go_unit_tests
-#   -> go_lint
-#   -> js_unit_tests
+# validate_go_deps
+# go_unit_tests
+# go_lint
+# js_unit_tests
 
-# Docker build and integration tests for every master/tag push and linkerd org PR:
+# Docker build and integration tests for every master/tag push and linkerd org PR
 #
-# download_src
-#   -> docker_pull
-#   -> docker_build
-#   -> kind_setup
-#     -> kind_integration
-#       -> kind_cleanup
+# docker_pull
+# docker_build
+# kind_setup
+#   -> kind_integration
+#     -> kind_cleanup
 
-# Docker deploy and cloud integration tests for every master/tag push:
+# Docker deploy and cloud integration tests for every master/tag push
 #
-#         -> docker_deploy
-#           -> cloud_integration
-#             -> cloud_cleanup
+#       -> docker_deploy
+#         -> cloud_integration
+#           -> cloud_cleanup
 
 jobs:
 
@@ -42,18 +40,12 @@ jobs:
   # - every PR
   #
 
-  #
-  # download_src checks out the source with actions/checkout and then tars
-  # and uploads the .git directory into the build artifacts storage.
-  # Every job afterwards downloads that and clones from it to get the source
-  # again. We only use actions/checkout once because of
-  # https://github.com/actions/checkout/issues/27
-  #
-
-  download_src:
-    name: Checkout source
+  validate_go_deps:
+    name: Validate go deps
     runs-on: ubuntu-18.04
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
     # for debugging
     - name: Dump env
       run: |
@@ -66,34 +58,6 @@ jobs:
       env:
         JOB_CONTEXT: ${{ toJson(job) }}
       run: echo "$JOB_CONTEXT"
-    - name: Checkout code
-      uses: actions/checkout@v1
-    - name: Create .git artifact
-      run: |
-        bin/root-tag
-        tar zcf linkerd2.$GITHUB_SHA.tar.gz .git/
-    - name: Upload .git artifact
-      uses: actions/upload-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: linkerd2.${{ github.sha }}.tar.gz
-
-  validate_go_deps:
-    name: Validate go deps
-    runs-on: ubuntu-18.04
-    needs: [download_src]
-    steps:
-    # TODO: when github actions adds support for anchors, use it here
-    # to avoid repeting these two steps on every job
-    - name: Download .git artifact
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
     - name: Validate go deps
       run: |
         . bin/_tag.sh
@@ -104,19 +68,11 @@ jobs:
   go_unit_tests:
     name: Go unit tests
     runs-on: ubuntu-18.04
-    needs: [download_src]
     container:
       image: golang:1.13.4
     steps:
-    - name: Download .git artifact
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+    - name: Checkout code
+      uses: actions/checkout@v2
     - name: Go unit tests
       env:
         GITCOOKIE_SH: ${{ secrets.GITCOOKIE_SH }}
@@ -128,19 +84,11 @@ jobs:
   go_lint:
     name: Go lint
     runs-on: ubuntu-18.04
-    needs: [download_src]
     container:
       image: golang:1.13.4
     steps:
-    - name: Download .git artifact
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+    - name: Checkout code
+      uses: actions/checkout@v2
     - name: Go lint
       env:
         GITCOOKIE_SH: ${{ secrets.GITCOOKIE_SH }}
@@ -153,19 +101,11 @@ jobs:
   go_fmt:
     name: Go Format
     runs-on: ubuntu-18.04
-    needs: [download_src]
     container:
       image: golang:1.13.4
     steps:
-    - name: Download .git artifact
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+    - name: Checkout code
+      uses: actions/checkout@v2
     - name: Format
       env:
         GITCOOKIE_SH: ${{ secrets.GITCOOKIE_SH }}
@@ -176,19 +116,11 @@ jobs:
   js_unit_tests:
     name: JS unit tests
     runs-on: ubuntu-18.04
-    needs: [download_src]
     container:
       image: node:10.16.0-stretch
     steps:
-    - name: Download .git artifact
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+    - name: Checkout code
+      uses: actions/checkout@v2
     - name: Yarn setup
       run: |
         curl -o- -L https://yarnpkg.com/install.sh | bash -s -- --version 1.21.1 --network-concurrency 1
@@ -209,19 +141,10 @@ jobs:
   docker_pull:
     name: Docker pull
     runs-on: ubuntu-18.04
-    needs: [download_src]
     steps:
-    - name: Download .git artifact
+    - name: Checkout code
       if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+      uses: actions/checkout@v2
     - name: Docker SSH setup
       if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
       run: |
@@ -236,25 +159,16 @@ jobs:
       env:
         DOCKER_HOST: ssh://linkerd-docker
       run: |
-        bin/docker pull gcr.io/linkerd-io/proxy-init:v1.2.0
+        bin/docker pull gcr.io/linkerd-io/proxy-init:v1.3.0
         bin/docker pull prom/prometheus:v2.11.1
 
   docker_build:
     name: Docker build
     runs-on: ubuntu-18.04
-    needs: [download_src]
     steps:
-    - name: Download .git artifact
+    - name: Checkout code
       if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+      uses: actions/checkout@v2
     - name: Docker SSH setup
       if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
       run: |
@@ -279,19 +193,10 @@ jobs:
         integration_test: [deep, upgrade, helm, custom_domain, external_issuer]
     name: Cluster setup (${{ matrix.integration_test }})
     runs-on: ubuntu-18.04
-    needs: [download_src]
     steps:
-    - name: Download .git artifact
+    - name: Checkout code
       if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+      uses: actions/checkout@v2
     - name: Docker SSH setup
       if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
       run: |
@@ -308,17 +213,17 @@ jobs:
       run: |
         TAG="$(CI_FORCE_CLEAN=1 bin/root-tag)"
         export KIND_CLUSTER=github-$TAG-${{ matrix.integration_test }}
+        export KUBECONFIG=/tmp/kind-config-$KIND_CLUSTER 
         export CUSTOM_DOMAIN_CONFIG="test/testdata/custom_cluster_domain_config.yaml"
         # retry cluster creation once in case of port conflict or kubeadm failure
         if [ "${{ matrix.integration_test }}" == "custom_domain" ]
         then
-          bin/kind create cluster --name=$KIND_CLUSTER --wait=2m --loglevel debug --config=$CUSTOM_DOMAIN_CONFIG ||
-            bin/kind create cluster --name=$KIND_CLUSTER --wait=2m --loglevel debug --config=$CUSTOM_DOMAIN_CONFIG
+          bin/kind create cluster --name=$KIND_CLUSTER --wait=2m --verbosity 3 --config=$CUSTOM_DOMAIN_CONFIG ||
+            bin/kind create cluster --name=$KIND_CLUSTER --wait=2m --verbosity 3 --config=$CUSTOM_DOMAIN_CONFIG
         else
-          bin/kind create cluster --name=$KIND_CLUSTER --wait=2m --loglevel debug ||
-            bin/kind create cluster --name=$KIND_CLUSTER --wait=2m --loglevel debug
+          bin/kind create cluster --name=$KIND_CLUSTER --wait=2m --verbosity 3 ||
+            bin/kind create cluster --name=$KIND_CLUSTER --wait=2m --verbosity 3
         fi
-        scp $(bin/kind get kubeconfig-path --name=$KIND_CLUSTER) linkerd-docker:/tmp
 
   kind_integration:
     strategy:
@@ -329,17 +234,9 @@ jobs:
     name: Integration tests (${{ matrix.integration_test }})
     runs-on: ubuntu-18.04
     steps:
-    - name: Download .git artifact
+    - name: Checkout code
       if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+      uses: actions/checkout@v2
     - name: Docker SSH setup
       if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
       run: |
@@ -354,12 +251,14 @@ jobs:
       run: |
         TAG="$(CI_FORCE_CLEAN=1 bin/root-tag)"
         export KIND_CLUSTER=github-$TAG-${{ matrix.integration_test }}
-        ssh -T linkerd-docker &> /dev/null << EOF
+        ssh -T linkerd-docker > /dev/null << EOF
           # TODO: This is using the kind binary on the remote host.
-          kind load docker-image gcr.io/linkerd-io/proxy-init:v1.2.0 --name=$KIND_CLUSTER
-          kind load docker-image prom/prometheus:v2.11.1 --name=$KIND_CLUSTER
+          # TODO: 'kind' still points to v0.5.1. When there are no more old CI branches depending on that
+          # we can replace it with v0.6.1. In the meantime we explicitly use 'kind-0.6.1'
+          kind-0.6.1 load docker-image gcr.io/linkerd-io/proxy-init:v1.3.0 --name=$KIND_CLUSTER
+          kind-0.6.1 load docker-image prom/prometheus:v2.11.1 --name=$KIND_CLUSTER
           for IMG in controller grafana proxy web ; do
-            kind load docker-image gcr.io/linkerd-io/\$IMG:$TAG --name=$KIND_CLUSTER
+            kind-0.6.1 load docker-image gcr.io/linkerd-io/\$IMG:$TAG --name=$KIND_CLUSTER
           done
         EOF
     - name: Install linkerd CLI
@@ -389,10 +288,11 @@ jobs:
         export KIND_CLUSTER=github-$TAG-${{ matrix.integration_test }}
         # Restore kubeconfig from remote docker host.
         mkdir -p $HOME/.kube
-        scp linkerd-docker:/tmp/kind-config-$KIND_CLUSTER $HOME/.kube
-        export KUBECONFIG=$(bin/kind get kubeconfig-path --name=$KIND_CLUSTER)
+        export KUBECONFIG=$HOME/.kube/kind-config-$KIND_CLUSTER
+        bin/kind export kubeconfig --name=$KIND_CLUSTER --kubeconfig $KUBECONFIG
         # Start ssh tunnel to allow kubectl to connect via localhost.
-        export KIND_PORT=$(bin/kubectl config view -o jsonpath="{.clusters[?(@.name=='$KIND_CLUSTER')].cluster.server}" | cut -d':' -f3)
+        export KIND_PORT=$(bin/kubectl config view -o jsonpath="{.clusters[?(@.name=='kind-$KIND_CLUSTER')].cluster.server}" | cut -d':' -f3)
+        echo "KIND_PORT: $KIND_PORT"
         ssh -4 -N -L $KIND_PORT:localhost:$KIND_PORT linkerd-docker &
         sleep 2 # Wait for ssh tunnel to come up.
         bin/kubectl version --short # Test connection to kind cluster.
@@ -412,17 +312,9 @@ jobs:
     name: Cluster cleanup (${{ matrix.integration_test }})
     runs-on: ubuntu-18.04
     steps:
-    - name: Download .git artifact
+    - name: Checkout code
       if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      if: github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+      uses: actions/checkout@v2
     # for debugging
     - name: Dump env
       run: |
@@ -464,17 +356,9 @@ jobs:
     runs-on: ubuntu-18.04
     needs: [validate_go_deps, go_unit_tests, go_lint, js_unit_tests, kind_integration, kind_cleanup]
     steps:
-    - name: Download .git artifact
+    - name: Checkout code
       if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+      uses: actions/checkout@v2
     - name: Configure gcloud
       if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
       env:
@@ -525,17 +409,9 @@ jobs:
     runs-on: ubuntu-18.04
     needs: [docker_deploy]
     steps:
-    - name: Download .git artifact
+    - name: Checkout code
       if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+      uses: actions/checkout@v2
     - name: Configure gcloud
       if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
       env:
@@ -592,17 +468,9 @@ jobs:
     runs-on: ubuntu-18.04
     needs: [cloud_integration]
     steps:
-    - name: Download .git artifact
+    - name: Checkout code
       if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+      uses: actions/checkout@v2
     - name: Configure gcloud
       if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags')
       env:
@@ -642,17 +510,9 @@ jobs:
     runs-on: ubuntu-18.04
     needs: [cloud_integration]
     steps:
-    - name: Download .git artifact
+    - name: Checkout code
       if: startsWith(github.ref, 'refs/tags')
-      uses: actions/download-artifact@v1
-      with:
-        name: linkerd2-src-${{ github.sha }}
-        path: ${{ runner.temp }}
-    - name: Clone source
-      if: startsWith(github.ref, 'refs/tags')
-      run: |
-        tar -C $RUNNER_TEMP -zxf $RUNNER_TEMP/linkerd2.$GITHUB_SHA.tar.gz
-        git clone $RUNNER_TEMP/.git $GITHUB_WORKSPACE
+      uses: actions/checkout@v2
     - name: Configure gsutils
       if: startsWith(github.ref, 'refs/tags')
       env:

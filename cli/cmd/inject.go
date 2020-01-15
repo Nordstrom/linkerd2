@@ -100,6 +100,11 @@ sub-folders, or coming from stdin.`,
 		&manualOption, "manual", manualOption,
 		"Include the proxy sidecar container spec in the YAML output (the auto-injector won't pick it up, so config annotations aren't supported) (default false)",
 	)
+	flags.Uint64Var(
+		&options.waitBeforeExitSeconds, "wait-before-exit-seconds", options.waitBeforeExitSeconds,
+		"The period during which the proxy sidecar must stay alive while its pod is terminating. "+
+			"Must be smaller than terminationGracePeriodSeconds for the pod (default 0)",
+	)
 	flags.BoolVar(
 		&options.disableIdentity, "disable-identity", options.disableIdentity,
 		"Disables resources from participating in TLS identity",
@@ -336,12 +341,12 @@ func (options *proxyConfigOptions) overrideConfigs(configs *cfg.All, overrideAnn
 	}
 
 	if len(options.ignoreInboundPorts) > 0 {
-		configs.Proxy.IgnoreInboundPorts = toPorts(options.ignoreInboundPorts)
-		overrideAnnotations[k8s.ProxyIgnoreInboundPortsAnnotation] = parsePorts(configs.Proxy.IgnoreInboundPorts)
+		configs.Proxy.IgnoreInboundPorts = toPortRanges(options.ignoreInboundPorts)
+		overrideAnnotations[k8s.ProxyIgnoreInboundPortsAnnotation] = parsePortRanges(configs.Proxy.IgnoreInboundPorts)
 	}
 	if len(options.ignoreOutboundPorts) > 0 {
-		configs.Proxy.IgnoreOutboundPorts = toPorts(options.ignoreOutboundPorts)
-		overrideAnnotations[k8s.ProxyIgnoreOutboundPortsAnnotation] = parsePorts(configs.Proxy.IgnoreOutboundPorts)
+		configs.Proxy.IgnoreOutboundPorts = toPortRanges(options.ignoreOutboundPorts)
+		overrideAnnotations[k8s.ProxyIgnoreOutboundPortsAnnotation] = parsePortRanges(configs.Proxy.IgnoreOutboundPorts)
 	}
 
 	if options.proxyAdminPort != 0 {
@@ -361,19 +366,21 @@ func (options *proxyConfigOptions) overrideConfigs(configs *cfg.All, overrideAnn
 		overrideAnnotations[k8s.ProxyOutboundPortAnnotation] = parsePort(configs.Proxy.OutboundPort)
 	}
 
+	if options.dockerRegistry != "" {
+		configs.Proxy.ProxyImage.ImageName = registryOverride(configs.Proxy.ProxyImage.ImageName, options.dockerRegistry)
+		configs.Proxy.ProxyInitImage.ImageName = registryOverride(configs.Proxy.ProxyInitImage.ImageName, options.dockerRegistry)
+		overrideAnnotations[k8s.ProxyImageAnnotation] = configs.Proxy.ProxyImage.ImageName
+		overrideAnnotations[k8s.ProxyInitImageAnnotation] = configs.Proxy.ProxyInitImage.ImageName
+	}
+
 	if options.proxyImage != "" {
 		configs.Proxy.ProxyImage.ImageName = options.proxyImage
-		if options.dockerRegistry != "" {
-			configs.Proxy.ProxyImage.ImageName = registryOverride(configs.Proxy.ProxyImage.ImageName, options.dockerRegistry)
-		}
 		overrideAnnotations[k8s.ProxyImageAnnotation] = configs.Proxy.ProxyImage.ImageName
 	}
 
 	if options.initImage != "" {
 		configs.Proxy.ProxyInitImage.ImageName = options.initImage
-		if options.dockerRegistry != "" {
-			configs.Proxy.ProxyInitImage.ImageName = registryOverride(configs.Proxy.ProxyInitImage.ImageName, options.dockerRegistry)
-		}
+
 		overrideAnnotations[k8s.ProxyInitImageAnnotation] = configs.Proxy.ProxyInitImage.ImageName
 	}
 
@@ -439,6 +446,13 @@ func (options *proxyConfigOptions) overrideConfigs(configs *cfg.All, overrideAnn
 	if options.traceCollectorSvcAccount != "" {
 		overrideAnnotations[k8s.ProxyTraceCollectorSvcAccountAnnotation] = options.traceCollectorSvcAccount
 	}
+	if options.waitBeforeExitSeconds != 0 {
+		overrideAnnotations[k8s.ProxyWaitBeforeExitSecondsAnnotation] = uintToString(options.waitBeforeExitSeconds)
+	}
+}
+
+func uintToString(v uint64) string {
+	return strconv.FormatUint(v, 10)
 }
 
 func toPort(p uint) *cfg.Port {
@@ -449,18 +463,18 @@ func parsePort(port *cfg.Port) string {
 	return strconv.FormatUint(uint64(port.GetPort()), 10)
 }
 
-func toPorts(ints []uint) []*cfg.Port {
-	ports := make([]*cfg.Port, len(ints))
-	for i, p := range ints {
-		ports[i] = toPort(p)
+func toPortRanges(portRanges []string) []*cfg.PortRange {
+	ports := make([]*cfg.PortRange, len(portRanges))
+	for i, p := range portRanges {
+		ports[i] = &cfg.PortRange{PortRange: p}
 	}
 	return ports
 }
 
-func parsePorts(ports []*cfg.Port) string {
+func parsePortRanges(portRanges []*cfg.PortRange) string {
 	var str string
-	for _, port := range ports {
-		str += parsePort(port) + ","
+	for _, p := range portRanges {
+		str += p.GetPortRange() + ","
 	}
 
 	return strings.TrimSuffix(str, ",")

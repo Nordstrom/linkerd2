@@ -1,7 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  creationTimestamp: null
   generation: 1
   labels:
     linkerd.io/control-plane-component: tap
@@ -32,7 +31,6 @@ spec:
         linkerd.io/created-by: linkerd/cli dev-undefined
         linkerd.io/identity-mode: default
         linkerd.io/proxy-version: test-inject-proxy-version
-      creationTimestamp: null
       labels:
         linkerd.io/control-plane-component: tap
         linkerd.io/control-plane-ns: linkerd
@@ -75,7 +73,6 @@ spec:
           periodSeconds: 10
           successThreshold: 1
           timeoutSeconds: 1
-        resources: {}
         securityContext:
           runAsUser: 2103
         terminationMessagePath: /dev/termination-log
@@ -89,11 +86,10 @@ spec:
       - image: gcr.io/linkerd-io/debug:test-inject-control-plane-version
         imagePullPolicy: IfNotPresent
         name: linkerd-debug
-        resources: {}
         terminationMessagePolicy: FallbackToLogsOnError
       - env:
         - name: LINKERD2_PROXY_LOG
-          value: warn,linkerd2_proxy=info
+          value: warn,linkerd=info
         - name: LINKERD2_PROXY_DESTINATION_SVC_ADDR
           value: linkerd-dst.linkerd.svc.cluster.local:8086
         - name: LINKERD2_PROXY_CONTROL_LISTEN_ADDR
@@ -170,7 +166,6 @@ spec:
             path: /ready
             port: 4191
           initialDelaySeconds: 2
-        resources: {}
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: true
@@ -192,7 +187,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.2.0
+        image: gcr.io/linkerd-io/proxy-init:v1.3.0
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -231,5 +226,4 @@ spec:
       - emptyDir:
           medium: Memory
         name: linkerd-identity-end-entity
-status: {}
 ---

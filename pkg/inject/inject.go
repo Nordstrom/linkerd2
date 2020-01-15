@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	jsonfilter "github.com/clarketm/json"
 	"github.com/linkerd/linkerd2/controller/gen/config"
 	"github.com/linkerd/linkerd2/pkg/charts"
 	l5dcharts "github.com/linkerd/linkerd2/pkg/charts/linkerd2"
@@ -177,7 +178,11 @@ func (conf *ResourceConfig) AppendPodAnnotation(k, v string) {
 
 // YamlMarshalObj returns the yaml for the workload in conf
 func (conf *ResourceConfig) YamlMarshalObj() ([]byte, error) {
-	return yaml.Marshal(conf.workload.obj)
+	j, err := getFilteredJSON(conf.workload.obj)
+	if err != nil {
+		return nil, err
+	}
+	return yaml.JSONToYAML(j)
 }
 
 // ParseMetaAndYAML extracts the workload metadata and pod specs from the given
@@ -199,8 +204,10 @@ func (conf *ResourceConfig) GetPatch(injectProxy bool) ([]byte, error) {
 	}
 	values := &patch{
 		Values: l5dcharts.Values{
-			Namespace:     conf.configs.GetGlobal().GetLinkerdNamespace(),
-			ClusterDomain: clusterDomain,
+			Global: &l5dcharts.Global{
+				Namespace:     conf.configs.GetGlobal().GetLinkerdNamespace(),
+				ClusterDomain: clusterDomain,
+			},
 		},
 		Annotations: map[string]string{},
 		Labels:      map[string]string{},
@@ -235,7 +242,7 @@ func (conf *ResourceConfig) GetPatch(injectProxy bool) ([]byte, error) {
 	chart := &charts.Chart{
 		Name:      "patch",
 		Dir:       "patch",
-		Namespace: values.Namespace,
+		Namespace: values.Global.Namespace,
 		RawValues: rawValues,
 		Files:     files,
 	}
@@ -283,7 +290,12 @@ func (conf *ResourceConfig) JSONToYAML(bytes []byte) ([]byte, error) {
 	if err := json.Unmarshal(bytes, obj); err != nil {
 		return nil, err
 	}
-	return yaml.Marshal(obj)
+
+	j, err := getFilteredJSON(obj)
+	if err != nil {
+		return nil, err
+	}
+	return yaml.JSONToYAML(j)
 }
 
 // parse parses the bytes payload, filling the gaps in ResourceConfig
@@ -451,7 +463,7 @@ func (conf *ResourceConfig) complete(template *corev1.PodTemplateSpec) {
 
 // injectPodSpec adds linkerd sidecars to the provided PodSpec.
 func (conf *ResourceConfig) injectPodSpec(values *patch) {
-	values.Proxy = &l5dcharts.Proxy{
+	values.Global.Proxy = &l5dcharts.Proxy{
 		Component:              conf.pod.labels[k8s.ProxyDeploymentLabel],
 		EnableExternalProfiles: conf.enableExternalProfiles(),
 		DisableTap:             conf.tapDisabled(),
@@ -467,8 +479,9 @@ func (conf *ResourceConfig) injectPodSpec(values *patch) {
 			Inbound:  conf.proxyInboundPort(),
 			Outbound: conf.proxyOutboundPort(),
 		},
-		UID:       conf.proxyUID(),
-		Resources: conf.proxyResourceRequirements(),
+		UID:                   conf.proxyUID(),
+		Resources:             conf.proxyResourceRequirements(),
+		WaitBeforeExitSeconds: conf.proxyWaitBeforeExitSeconds(),
 	}
 
 	if v := conf.pod.meta.Annotations[k8s.ProxyEnableDebugAnnotation]; v != "" {
@@ -496,21 +509,21 @@ func (conf *ResourceConfig) injectPodSpec(values *patch) {
 	// enabled
 	if conf.pod.spec.Containers != nil && len(conf.pod.spec.Containers) > 0 {
 		if sc := conf.pod.spec.Containers[0].SecurityContext; sc != nil && sc.Capabilities != nil {
-			values.Proxy.Capabilities = &l5dcharts.Capabilities{
+			values.Global.Proxy.Capabilities = &l5dcharts.Capabilities{
 				Add:  []string{},
 				Drop: []string{},
 			}
 			for _, add := range sc.Capabilities.Add {
-				values.Proxy.Capabilities.Add = append(values.Proxy.Capabilities.Add, string(add))
+				values.Global.Proxy.Capabilities.Add = append(values.Global.Proxy.Capabilities.Add, string(add))
 			}
 			for _, drop := range sc.Capabilities.Drop {
-				values.Proxy.Capabilities.Drop = append(values.Proxy.Capabilities.Drop, string(drop))
+				values.Global.Proxy.Capabilities.Drop = append(values.Global.Proxy.Capabilities.Drop, string(drop))
 			}
 		}
 	}
 
 	if saVolumeMount != nil {
-		values.Proxy.SAMountPath = &l5dcharts.SAMountPath{
+		values.Global.Proxy.SAMountPath = &l5dcharts.SAMountPath{
 			Name:      saVolumeMount.Name,
 			MountPath: saVolumeMount.MountPath,
 			ReadOnly:  saVolumeMount.ReadOnly,
@@ -523,25 +536,23 @@ func (conf *ResourceConfig) injectPodSpec(values *patch) {
 
 	idctx := conf.identityContext()
 	if idctx == nil {
-		values.Proxy.DisableIdentity = true
+		values.Global.Proxy.DisableIdentity = true
 		return
 	}
-
-	values.Identity = &l5dcharts.Identity{
-		TrustAnchorsPEM: idctx.GetTrustAnchorsPem(),
-		TrustDomain:     idctx.GetTrustDomain(),
-	}
+	values.Global.IdentityTrustAnchorsPEM = idctx.GetTrustAnchorsPem()
+	values.Global.IdentityTrustDomain = idctx.GetTrustDomain()
+	values.Identity = &l5dcharts.Identity{}
 
 	values.AddRootVolumes = len(conf.pod.spec.Volumes) == 0
 
 	if trace := conf.trace(); trace != nil {
 		log.Infof("tracing enabled: remote service=%s, service account=%s", trace.CollectorSvcAddr, trace.CollectorSvcAccount)
-		values.Proxy.Trace = trace
+		values.Global.Proxy.Trace = trace
 	}
 }
 
 func (conf *ResourceConfig) injectProxyInit(values *patch) {
-	values.ProxyInit = &l5dcharts.ProxyInit{
+	values.Global.ProxyInit = &l5dcharts.ProxyInit{
 		Image: &l5dcharts.Image{
 			Name:       conf.proxyInitImage(),
 			PullPolicy: conf.proxyInitImagePullPolicy(),
@@ -559,8 +570,8 @@ func (conf *ResourceConfig) injectProxyInit(values *patch) {
 				Request: proxyInitResourceRequestMemory,
 			},
 		},
-		Capabilities: values.Proxy.Capabilities,
-		SAMountPath:  values.Proxy.SAMountPath,
+		Capabilities: values.Global.Proxy.Capabilities,
+		SAMountPath:  values.Global.Proxy.SAMountPath,
 	}
 
 	values.AddRootInitContainers = len(conf.pod.spec.InitContainers) == 0
@@ -757,6 +768,20 @@ func (conf *ResourceConfig) tapDisabled() bool {
 	return false
 }
 
+func (conf *ResourceConfig) proxyWaitBeforeExitSeconds() uint64 {
+	if override := conf.getOverride(k8s.ProxyWaitBeforeExitSecondsAnnotation); override != "" {
+		waitBeforeExitSeconds, err := strconv.ParseUint(override, 10, 64)
+		if nil != err {
+			log.Warnf("unrecognized value used for the %s annotation, uint64 is expected: %s",
+				k8s.ProxyWaitBeforeExitSecondsAnnotation, override)
+		}
+
+		return waitBeforeExitSeconds
+	}
+
+	return 0
+}
+
 func (conf *ResourceConfig) proxyResourceRequirements() *l5dcharts.Resources {
 	var (
 		requestCPU    k8sResource.Quantity
@@ -860,12 +885,11 @@ func (conf *ResourceConfig) proxyInboundSkipPorts() string {
 		return override
 	}
 
-	ports := []string{}
-	for _, port := range conf.configs.GetProxy().GetIgnoreInboundPorts() {
-		portStr := strconv.FormatUint(uint64(port.GetPort()), 10)
-		ports = append(ports, portStr)
+	portRanges := []string{}
+	for _, portOrRange := range conf.configs.GetProxy().GetIgnoreInboundPorts() {
+		portRanges = append(portRanges, portOrRange.GetPortRange())
 	}
-	return strings.Join(ports, ",")
+	return strings.Join(portRanges, ",")
 }
 
 func (conf *ResourceConfig) proxyOutboundSkipPorts() string {
@@ -873,12 +897,11 @@ func (conf *ResourceConfig) proxyOutboundSkipPorts() string {
 		return override
 	}
 
-	ports := []string{}
+	portRanges := []string{}
 	for _, port := range conf.configs.GetProxy().GetIgnoreOutboundPorts() {
-		portStr := strconv.FormatUint(uint64(port.GetPort()), 10)
-		ports = append(ports, portStr)
+		portRanges = append(portRanges, port.GetPortRange())
 	}
-	return strings.Join(ports, ",")
+	return strings.Join(portRanges, ",")
 }
 
 // GetOverriddenConfiguration returns a map of the overridden proxy annotations
@@ -926,5 +949,18 @@ func (conf *ResourceConfig) InjectNamespace(annotations map[string]string) ([]by
 			ns.Annotations[annotation] = value
 		}
 	}
-	return yaml.Marshal(ns)
+
+	j, err := getFilteredJSON(ns)
+	if err != nil {
+		return nil, err
+	}
+	return yaml.JSONToYAML(j)
+}
+
+//getFilteredJSON method performs JSON marshaling such that zero values of
+//empty structs are respected by `omitempty` tags. We make use of a drop-in
+//replacement of the standard json/encoding library, without which empty struct values
+//present in workload objects would make it into the marshaled JSON.
+func getFilteredJSON(conf runtime.Object) ([]byte, error) {
+	return jsonfilter.Marshal(&conf)
 }
