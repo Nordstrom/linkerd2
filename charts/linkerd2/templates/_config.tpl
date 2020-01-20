@@ -6,9 +6,14 @@
   "identityContext":{
     "trustDomain": "{{.Values.global.identityTrustDomain}}",
     "trustAnchorsPem": "{{required "Please provide the identity trust anchors" .Values.global.identityTrustAnchorsPEM | trim | replace "\n" "\\n"}}",
-    "issuanceLifetime": "{{.Values.identity.issuer.issuanceLifetime}}",
-    "clockSkewAllowance": "{{.Values.identity.issuer.clockSkewAllowance}}",
-    "scheme": "{{.Values.identity.issuer.scheme}}"
+    "issuer":{
+      "issuerType":"{{.Values.identity.issuer.issuerType}}"
+      "issuanceLifetime": "{{.Values.identity.issuer.issuanceLifetime}}",
+    },
+    "linkerdIdentityIssuer":{
+      "clockSkewAllowance": "{{.Values.linkerdIdentityIssuer.clockSkewAllowance}}",
+      "scheme": "{{.Values.linkerdIdentityIssuer.scheme}}"
+    }
   },
   "autoInjectContext": null,
   "omitWebhookSideEffects": {{.Values.omitWebhookSideEffects}},

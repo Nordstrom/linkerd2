@@ -15,37 +15,44 @@ import (
 const (
 	helmDefaultChartDir     = "linkerd2"
 	helmDefaultHAValuesFile = "values-ha.yaml"
+
+	// LinkerdIdentityIssuerType is the type that represents the linkerd-identity service as the certificate issuer
+	LinkerdIdentityIssuerType string = "linkerd"
+	// AwsAcmPcaIdentityIssuerType is the type that represents Aws Acm Pca as the certificate issuer
+	AwsAcmPcaIdentityIssuerType string = "awsacmpca"
 )
 
 type (
 	// Values contains the top-level elements in the Helm charts
 	Values struct {
-		Stage                       string            `json:"stage"`
-		ControllerImage             string            `json:"controllerImage"`
-		ControllerImageVersion      string            `json:"controllerImageVersion"`
-		WebImage                    string            `json:"webImage"`
-		PrometheusImage             string            `json:"prometheusImage"`
-		GrafanaImage                string            `json:"grafanaImage"`
-		ControllerReplicas          uint              `json:"controllerReplicas"`
-		ControllerLogLevel          string            `json:"controllerLogLevel"`
-		PrometheusLogLevel          string            `json:"prometheusLogLevel"`
-		ControllerUID               int64             `json:"controllerUID"`
-		EnableH2Upgrade             bool              `json:"enableH2Upgrade"`
-		EnablePodAntiAffinity       bool              `json:"enablePodAntiAffinity"`
-		WebhookFailurePolicy        string            `json:"webhookFailurePolicy"`
-		OmitWebhookSideEffects      bool              `json:"omitWebhookSideEffects"`
-		RestrictDashboardPrivileges bool              `json:"restrictDashboardPrivileges"`
-		DisableHeartBeat            bool              `json:"disableHeartBeat"`
-		HeartbeatSchedule           string            `json:"heartbeatSchedule"`
-		InstallNamespace            bool              `json:"installNamespace"`
-		Configs                     ConfigJSONs       `json:"configs"`
-		Global                      *Global           `json:"global"`
-		Identity                    *Identity         `json:"identity"`
-		Dashboard                   *Dashboard        `json:"dashboard"`
-		ProxyInjector               *ProxyInjector    `json:"proxyInjector"`
-		ProfileValidator            *ProfileValidator `json:"profileValidator"`
-		Tap                         *Tap              `json:"tap"`
-		NodeSelector                map[string]string `json:"nodeSelector"`
+		Stage                       string                   `json:"stage"`
+		ControllerImage             string                   `json:"controllerImage"`
+		ControllerImageVersion      string                   `json:"controllerImageVersion"`
+		WebImage                    string                   `json:"webImage"`
+		PrometheusImage             string                   `json:"prometheusImage"`
+		GrafanaImage                string                   `json:"grafanaImage"`
+		ControllerReplicas          uint                     `json:"controllerReplicas"`
+		ControllerLogLevel          string                   `json:"controllerLogLevel"`
+		PrometheusLogLevel          string                   `json:"prometheusLogLevel"`
+		ControllerUID               int64                    `json:"controllerUID"`
+		EnableH2Upgrade             bool                     `json:"enableH2Upgrade"`
+		EnablePodAntiAffinity       bool                     `json:"enablePodAntiAffinity"`
+		WebhookFailurePolicy        string                   `json:"webhookFailurePolicy"`
+		OmitWebhookSideEffects      bool                     `json:"omitWebhookSideEffects"`
+		RestrictDashboardPrivileges bool                     `json:"restrictDashboardPrivileges"`
+		DisableHeartBeat            bool                     `json:"disableHeartBeat"`
+		HeartbeatSchedule           string                   `json:"heartbeatSchedule"`
+		InstallNamespace            bool                     `json:"installNamespace"`
+		Configs                     ConfigJSONs              `json:"configs"`
+		Global                      *Global                  `json:"global"`
+		Identity                    *Identity                `json:"identity"`
+		LinkerdIdentityIssuer       *LinkerdIdentityIssuer   `json:"linkerdIdentityIssuer"`
+		AwsAcmPcaIdentityIssuer     *AwsAcmPcaIdentityIssuer `json:"awsAcmPcaIdentityIssuer"`
+		Dashboard                   *Dashboard               `json:"dashboard"`
+		ProxyInjector               *ProxyInjector           `json:"proxyInjector"`
+		ProfileValidator            *ProfileValidator        `json:"profileValidator"`
+		Tap                         *Tap                     `json:"tap"`
+		NodeSelector                map[string]string        `json:"nodeSelector"`
 
 		DestinationResources   *Resources `json:"destinationResources"`
 		GrafanaResources       *Resources `json:"grafanaResources"`
@@ -175,12 +182,23 @@ type (
 
 	// Issuer has the Helm variables of the identity issuer
 	Issuer struct {
-		Scheme              string    `json:"scheme"`
+		IssuanceLifetime string `json:"issuanceLifetime"`
+		IssuerType       string `json:"issuerType"`
+	}
+
+	// LinkerdIdentityIssuer has the Helm variables of the linkerd identity issuer
+	LinkerdIdentityIssuer struct {
 		ClockSkewAllowance  string    `json:"clockSkewAllowance"`
-		IssuanceLifetime    string    `json:"issuanceLifetime"`
 		CrtExpiryAnnotation string    `json:"crtExpiryAnnotation"`
 		CrtExpiry           time.Time `json:"crtExpiry"`
+		Scheme              string    `json:"scheme"`
 		TLS                 *TLS      `json:"tls"`
+	}
+
+	// AwsAcmPcaIdentityIssuer has the Helm variables of the aws acm pca identity issuer
+	AwsAcmPcaIdentityIssuer struct {
+		CaArn    string `json:"caArn"`
+		CaRegion string `json:"caRegion"`
 	}
 
 	// ProxyInjector has all the proxy injector's Helm variables

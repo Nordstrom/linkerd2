@@ -46,9 +46,9 @@ In this example we set the expiration date to one year ahead:
 ```bash
 helm install \
   --set-file global.identityTrustAnchorsPEM=ca.crt \
-  --set-file identity.issuer.tls.crtPEM=issuer.crt \
-  --set-file identity.issuer.tls.keyPEM=issuer.key \
-  --set identity.issuer.crtExpiry=$(date -d '+8760 hour' +"%Y-%m-%dT%H:%M:%SZ") \
+  --set-file linkerdIdentityIssuer.tls.crtPEM=issuer.crt \
+  --set-file linkerdIdentityIssuer.tls.keyPEM=issuer.key \
+  --set linkerdIdentityIssuer.crtExpiry=$(date -d '+8760 hour' +"%Y-%m-%dT%H:%M:%SZ") \
   linkerd/linkerd2
 ```
 
@@ -71,9 +71,9 @@ Then use the `-f` flag to provide the override file, for example:
 ```bash
 helm install \
   --set-file global.identityTrustAnchorsPEM=ca.crt \
-  --set-file identity.issuer.tls.crtPEM=issuer.crt \
-  --set-file identity.issuer.tls.keyPEM=issuer.key \
-  --set identity.issuer.crtExpiry=$(date -d '+8760 hour' +"%Y-%m-%dT%H:%M:%SZ") \
+  --set-file linkerdIdentityIssuer.tls.crtPEM=issuer.crt \
+  --set-file linkerdIdentityIssuer.tls.keyPEM=issuer.key \
+  --set linkerdIdentityIssuer.crtExpiry=$(date -d '+8760 hour' +"%Y-%m-%dT%H:%M:%SZ") \
   -f linkerd2/values-ha.yaml
   linkerd/linkerd2
 ```
@@ -131,13 +131,14 @@ The following table lists the configurable parameters of the Linkerd2 chart and 
 | `global.proxyInjectDisabled`                 | Annotation value to disable injection. Do not edit.                                                                                                                                   | `disabled`                           |
 | `grafanaImage`                        | Docker image for the Grafana container                                                                                                                                                | `gcr.io/linkerd-io/grafana`          |
 | `heartbeatSchedule`                   | Config for the heartbeat cronjob                                                                                                                                                      | `0 0 * * *`                          |
-| `identity.issuer.clockSkewAllowance`  | Amount of time to allow for clock skew within a Linkerd cluster                                                                                                                       | `20s`                                |
-| `identity.issuer.crtExpiry`           | Expiration timestamp for the issuer certificate. It must be provided during install                                                                                                                                         ||
-| `identity.issuer.crtExpiryAnnotation` | Annotation used to identity the issuer certificate expiration timestamp. Do not edit.                                                                                                 | `linkerd.io/identity-issuer-expiry`  |
+| `linkerdIdentityIssuer.clockSkewAllowance`  | Amount of time to allow for clock skew within a Linkerd cluster                                 |`20s`|
+| `linkerdIdentityIssuer.crtExpiry`           | Expiration timestamp for the issuer certificate. It must be provided during install             ||
+| `linkerdIdentityIssuer.crtExpiryAnnotation` | Annotation used to identity the issuer certificate expiration timestamp. Do not edit.           |`linkerd.io/identity-issuer-expiry`|
+| `linkerdIdentityIssuer.tls.crtPEM`          | Issuer certificate (ECDSA). It must be provided during install.                                 ||
+| `linkerdIdentityIssuer.tls.keyPEM`          | Key for the issuer certificate (ECDSA). It must be provided during install.                     ||
+| `linkerdIdentityIssuer.scheme`              | Which scheme is used for the identity issuer secret format                                                                                                                            | `linkerd.io/tls`                     |
 | `identity.issuer.issuanceLifetime`    | Amount of time for which the Identity issuer should certify identity                                                                                                                  | `86400s`                             |
-| `identity.issuer.scheme`              | Which scheme is used for the identity issuer secret format                                                                                                                            | `linkerd.io/tls`                     |
-| `identity.issuer.tls.crtPEM`          | Issuer certificate (ECDSA). It must be provided during install.                                                                                                                                                             ||
-| `identity.issuer.tls.keyPEM`          | Key for the issuer certificate (ECDSA). It must be provided during install.                                                                                                                                                 ||
+| `identity.issuer.issuerType`    | The type of issuer to use, "linkerd" or "awsacmpca"                                                                                                                  | `linkerd`                             |
 | `installNamespace`                    | Set to false when installing Linkerd in a custom namespace. See the [Linkerd documentation](https://linkerd.io/2/tasks/install-helm/#customizing-the-namespace) for more information. | `true`                               |
 | `omitWebhookSideEffects`              | Omit the `sideEffects` flag in the webhook manifests                                                                                                                                  | `false`                              |
 | `prometheusImage`                     | Docker image for the Prometheus container                                                                                                                                             | `prom/prometheus:v2.15.2`            |
@@ -148,7 +149,7 @@ The following table lists the configurable parameters of the Linkerd2 chart and 
 | `profileValidator.keyPEM`             | Certificate key for the service profile validator. If not provided then Helm will generate one.                                                                                                                             ||
 | `tap.crtPEM`                          | Certificate for the Tap component. If not provided then Helm will generate one.                                                                                                                                             ||
 | `tap.keyPEM`                          | Certificate key for Tap component. If not provided then Helm will generate one.                                                                                                                                             ||
-| `webhookFailurePolicy`                | Failure policy for the proxy injector                                                                                                                                                 | `Ignore`                             
+| `webhookFailurePolicy`                | Failure policy for the proxy injector                                                                                                                                                 | `Ignore`
 | `webImage`                            | Docker image for the web container                                                                                                                                                    | `gcr.io/linkerd-io/web`              |
 
 ## Get involved
@@ -158,7 +159,6 @@ The following table lists the configurable parameters of the Linkerd2 chart and 
 [developer mailing list][linkerd-dev], and [announcements mailing list][linkerd-announce].
 * Follow [@linkerd][twitter] on Twitter.
 * Join the [Linkerd Slack][slack].
-
 
 [cncf]: https://www.cncf.io/
 [getting-started]: https://linkerd.io/2/getting-started/
