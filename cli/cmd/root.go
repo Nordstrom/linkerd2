@@ -43,6 +43,7 @@ var (
 	kubeconfigPath        string
 	kubeContext           string
 	impersonate           string
+	impersonateGroup      []string
 	verbose               bool
 
 	// These regexs are not as strict as they could be, but are a quick and dirty
@@ -96,6 +97,7 @@ func init() {
 	RootCmd.PersistentFlags().StringVar(&kubeconfigPath, "kubeconfig", "", "Path to the kubeconfig file to use for CLI requests")
 	RootCmd.PersistentFlags().StringVar(&kubeContext, "context", "", "Name of the kubeconfig context to use")
 	RootCmd.PersistentFlags().StringVar(&impersonate, "as", "", "Username to impersonate for Kubernetes operations")
+	RootCmd.PersistentFlags().StringArrayVar(&impersonateGroup, "as-group", []string{}, "Group to impersonate for Kubernetes operations")
 	RootCmd.PersistentFlags().StringVar(&apiAddr, "api-addr", "", "Override kubeconfig and communicate directly with the control plane at host:port (mostly for testing)")
 	RootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Turn on debug logging")
 
@@ -185,6 +187,8 @@ type proxyConfigOptions struct {
 	proxyImage               string
 	initImage                string
 	initImageVersion         string
+	debugImage               string
+	debugImageVersion        string
 	dockerRegistry           string
 	imagePullPolicy          string
 	ignoreInboundPorts       []string
@@ -203,10 +207,9 @@ type proxyConfigOptions struct {
 	traceCollector           string
 	traceCollectorSvcAccount string
 	waitBeforeExitSeconds    uint64
-	// ignoreCluster is not validated by validate().
-	ignoreCluster   bool
-	disableIdentity bool
-	disableTap      bool
+	ignoreCluster            bool // not validated by validate()
+	disableIdentity          bool
+	disableTap               bool
 }
 
 func (options *proxyConfigOptions) validate() error {

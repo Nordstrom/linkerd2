@@ -1,3 +1,48 @@
+## edge-20.1.4
+
+This edge release is a release candidate for `stable-2.7`.
+
+The `linkerd check` command has been updated to improve the control plane
+debugging experience.
+
+* CLI
+  * Updated the mTLS trust anchor checks to eliminate false positives caused by
+    extra trailing spaces
+  * Reduced the severity level of the Linkerd version checks, so that they
+    don't fail when the external version endpoint is unreachable
+    (thanks @mayankshah1607!)
+  * Added a new `tap` APIService check to aid with uncovering Kubernetes API
+    aggregatation layer issues (thanks @droidnoob!)
+
+## edge-20.1.3
+
+This edge release is a release candidate for `stable-2.7`.
+
+An update to the Helm charts has caused a **breaking change** for users who
+have installed Linkerd using Helm. In order to make the purpose of the
+`noInitContainer` parameter more explicit, it has been renamed to `cniEnabled`.
+
+* CLI
+  * Introduced CNI checks to confirm the CNI plugin is installed and ready;
+    this is done through `linkerd check --pre --linkerd-cni-enabled` before
+    installation and `linkerd check` after installation if the CNI plugin is
+    present
+  * Added support for the `--as-group` flag so that users can impersonate
+    groups for Kubernetes operations (thanks @mayankshah160!)
+* Controller
+  * Fixed an issue where an override of the Docker registry was not being
+    applied to debug containers (thanks @javaducky!)
+  * Added check for the Subject Alternate Name attributes to the API server
+    when access restrictions have been enabled (thanks @javaducky!)
+  * Added support for arbitrary pod labels so that users can leverage the
+    Linkerd provided Prometheus instance to scrape for their own labels
+    (thanks @daxmc99!)
+  * Fixed an issue with CNI config parsing
+* Helm
+  * **Breaking change**: Renamed `noInitContainer` parameter to `cniEnabled`
+  * Fixed an issue with `helm install` where the lists of ignored inbound and
+    outbound ports would not be reflected
+
 ## edge-20.1.2
 
 * CLI

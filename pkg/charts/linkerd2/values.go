@@ -42,6 +42,7 @@ type (
 		Global                      *Global           `json:"global"`
 		Identity                    *Identity         `json:"identity"`
 		Dashboard                   *Dashboard        `json:"dashboard"`
+		DebugContainer              *DebugContainer   `json:"debugContainer"`
 		ProxyInjector               *ProxyInjector    `json:"proxyInjector"`
 		ProfileValidator            *ProfileValidator `json:"profileValidator"`
 		Tap                         *Tap              `json:"tap"`
@@ -73,7 +74,7 @@ type (
 		LinkerdNamespaceLabel    string `json:"linkerdNamespaceLabel"`
 		ProxyContainerName       string `json:"proxyContainerName"`
 		HighAvailability         bool   `json:"highAvailability"`
-		NoInitContainer          bool   `json:"noInitContainer"`
+		CNIEnabled               bool   `json:"cniEnabled"`
 		ControlPlaneTracing      bool   `json:"controlPlaneTracing"`
 		IdentityTrustAnchorsPEM  string `json:"identityTrustAnchorsPEM"`
 		IdentityTrustDomain      string `json:"identityTrustDomain"`

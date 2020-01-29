@@ -80,7 +80,7 @@ func TestRender(t *testing.T) {
 			ProxyInjectDisabled:      "ProxyInjectDisabled",
 			LinkerdNamespaceLabel:    "LinkerdNamespaceLabel",
 			ProxyContainerName:       "ProxyContainerName",
-			NoInitContainer:          false,
+			CNIEnabled:               false,
 			IdentityTrustDomain:      defaultValues.Global.IdentityTrustDomain,
 			IdentityTrustAnchorsPEM:  defaultValues.Global.IdentityTrustAnchorsPEM,
 			Proxy: &charts.Proxy{
@@ -158,15 +158,15 @@ func TestRender(t *testing.T) {
 	haWithOverridesValues, _, _ := haWithOverridesOptions.validateAndBuild("", nil)
 	addFakeTLSSecrets(haWithOverridesValues)
 
-	noInitContainerOptions, err := testInstallOptions()
+	cniEnabledOptions, err := testInstallOptions()
 	if err != nil {
 		t.Fatalf("Unexpected error: %v\n", err)
 	}
 
-	noInitContainerOptions.recordedFlags = []*config.Install_Flag{{Name: "linkerd-cni-enabled", Value: "true"}}
-	noInitContainerOptions.noInitContainer = true
-	noInitContainerValues, _, _ := noInitContainerOptions.validateAndBuild("", nil)
-	addFakeTLSSecrets(noInitContainerValues)
+	cniEnabledOptions.recordedFlags = []*config.Install_Flag{{Name: "linkerd-cni-enabled", Value: "true"}}
+	cniEnabledOptions.cniEnabled = true
+	cniEnabledValues, _, _ := cniEnabledOptions.validateAndBuild("", nil)
+	addFakeTLSSecrets(cniEnabledValues)
 
 	withProxyIgnoresOptions, err := testInstallOptions()
 	if err != nil {
@@ -201,6 +201,18 @@ func TestRender(t *testing.T) {
 	withControlPlaneTracingValues, _, _ := withControlPlaneTracing.validateAndBuild("", nil)
 	addFakeTLSSecrets(withControlPlaneTracingValues)
 
+	customRegistryOverride := "my.custom.registry/linkerd-io"
+	withCustomRegistryOptions, err := testInstallOptions()
+	if err != nil {
+		t.Fatalf("Unexpected error: %v\n", err)
+	}
+	withCustomRegistryOptions.dockerRegistry = customRegistryOverride
+	withCustomRegistryOptions.recordedFlags = []*config.Install_Flag{
+		{Name: "registry", Value: customRegistryOverride},
+	}
+	withCustomRegistryValues, _, _ := withCustomRegistryOptions.validateAndBuild("", nil)
+	addFakeTLSSecrets(withCustomRegistryValues)
+
 	testCases := []struct {
 		values         *charts.Values
 		goldenFileName string
@@ -211,11 +223,12 @@ func TestRender(t *testing.T) {
 		{metaValues, "install_output.golden"},
 		{haValues, "install_ha_output.golden"},
 		{haWithOverridesValues, "install_ha_with_overrides_output.golden"},
-		{noInitContainerValues, "install_no_init_container.golden"},
+		{cniEnabledValues, "install_no_init_container.golden"},
 		{withProxyIgnoresValues, "install_proxy_ignores.golden"},
 		{withHeartBeatDisabledValues, "install_heartbeat_disabled_output.golden"},
 		{withRestrictedDashboardPriviligesValues, "install_restricted_dashboard.golden"},
 		{withControlPlaneTracingValues, "install_controlplane_tracing_output.golden"},
+		{withCustomRegistryValues, "install_custom_registry.golden"},
 	}
 
 	for i, tc := range testCases {
@@ -264,6 +277,7 @@ func testInstallOptions() (*installOptions, error) {
 
 	o.ignoreCluster = true
 	o.proxyVersion = "install-proxy-version"
+	o.debugImageVersion = "install-debug-version"
 	o.controlPlaneVersion = "install-control-plane-version"
 	o.heartbeatSchedule = fakeHeartbeatSchedule
 	o.identityOptions.crtPEMFile = filepath.Join("testdata", "valid-crt.pem")
@@ -319,7 +333,7 @@ func TestValidate(t *testing.T) {
 		actual, err := underTest.buildValuesWithoutIdentity(testValues)
 
 		if err != nil {
-			t.Fatalf("Unexpected error ocured %s", err)
+			t.Fatalf("Unexpected error occurred %s", err)
 		}
 
 		if actual.PrometheusLogLevel != expected {

@@ -23,13 +23,13 @@ func TestRenderHelm(t *testing.T) {
 
 	t.Run("Non-HA mode", func(t *testing.T) {
 		ha := false
-		chartControlPlane := chartControlPlane(t, ha)
+		chartControlPlane := chartControlPlane(t, ha, "111", "222")
 		testRenderHelm(t, chartControlPlane, "install_helm_output.golden")
 	})
 
 	t.Run("HA mode", func(t *testing.T) {
 		ha := true
-		chartControlPlane := chartControlPlane(t, ha)
+		chartControlPlane := chartControlPlane(t, ha, "111", "222")
 		testRenderHelm(t, chartControlPlane, "install_helm_output_ha.golden")
 	})
 }
@@ -69,6 +69,11 @@ func testRenderHelm(t *testing.T, chart *pb.Chart, goldenFileName string) {
     }
   },
   "configs": null,
+  "debugContainer":{
+    "image":{
+      "version":"test-debug-version"
+    }
+  },
   "proxyInjector":{
     "keyPEM":"test-proxy-injector-key-pem",
     "crtPEM":"test-proxy-injector-crt-pem"
@@ -115,13 +120,25 @@ func testRenderHelm(t *testing.T, chart *pb.Chart, goldenFileName string) {
 	diffTestdata(t, goldenFileName, buf.String())
 }
 
-func chartControlPlane(t *testing.T, ha bool) *pb.Chart {
-	values, err := readTestValues(t, ha)
+func chartControlPlane(t *testing.T, ha bool, ignoreOutboundPorts string, ignoreInboundPorts string) *pb.Chart {
+	values, err := readTestValues(t, ha, ignoreOutboundPorts, ignoreInboundPorts)
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}
 
-	chartPartials := chartPartials(t)
+	partialPaths := []string{
+		"templates/_proxy.tpl",
+		"templates/_proxy-init.tpl",
+		"templates/_volumes.tpl",
+		"templates/_resources.tpl",
+		"templates/_metadata.tpl",
+		"templates/_helpers.tpl",
+		"templates/_debug.tpl",
+		"templates/_trace.tpl",
+		"templates/_capabilities.tpl",
+	}
+
+	chartPartials := chartPartials(t, partialPaths)
 
 	chart := &pb.Chart{
 		Metadata: &pb.Metadata{
@@ -152,7 +169,12 @@ func chartControlPlane(t *testing.T, ha bool) *pb.Chart {
 	return chart
 }
 
-func chartPartials(t *testing.T) *pb.Chart {
+func chartPartials(t *testing.T, paths []string) *pb.Chart {
+	partialTemplates := []*pb.Template{}
+	for _, path := range paths {
+		partialTemplates = append(partialTemplates, &pb.Template{Name: path})
+	}
+
 	chart := &pb.Chart{
 		Metadata: &pb.Metadata{
 			Name: "partials",
@@ -160,17 +182,7 @@ func chartPartials(t *testing.T) *pb.Chart {
 				filepath.Join("..", "..", "..", "charts", "partials"),
 			},
 		},
-		Templates: []*pb.Template{
-			{Name: "templates/_proxy.tpl"},
-			{Name: "templates/_proxy-init.tpl"},
-			{Name: "templates/_volumes.tpl"},
-			{Name: "templates/_resources.tpl"},
-			{Name: "templates/_metadata.tpl"},
-			{Name: "templates/_helpers.tpl"},
-			{Name: "templates/_debug.tpl"},
-			{Name: "templates/_trace.tpl"},
-			{Name: "templates/_capabilities.tpl"},
-		},
+		Templates: partialTemplates,
 	}
 
 	for _, template := range chart.Templates {
@@ -182,11 +194,13 @@ func chartPartials(t *testing.T) *pb.Chart {
 	return chart
 }
 
-func readTestValues(t *testing.T, ha bool) ([]byte, error) {
+func readTestValues(t *testing.T, ha bool, ignoreOutboundPorts string, ignoreInboundPorts string) ([]byte, error) {
 	values, err := l5dcharts.NewValues(ha)
 	if err != nil {
 		t.Fatal("Unexpected error", err)
 	}
+	values.Global.ProxyInit.IgnoreOutboundPorts = ignoreOutboundPorts
+	values.Global.ProxyInit.IgnoreInboundPorts = ignoreInboundPorts
 
 	return yaml.Marshal(values)
 }

@@ -2280,7 +2280,7 @@ data:
   global: |
     {"linkerdNamespace":"linkerd","cniEnabled":false,"version":"install-control-plane-version","identityContext":{"trustDomain":"cluster.local","trustAnchorsPem":"fake-trust-anchors-pem","issuanceLifetime":"86400s","clockSkewAllowance":"20s"}}
   proxy: |
-    {"proxyImage":{"imageName":"gcr.io/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"gcr.io/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"","requestMemory":"","limitCpu":"","limitMemory":""},"proxyUid":"2102","logLevel":{"level":"warn,linkerd=info"},"disableExternalProfiles":true,"proxyVersion":"install-proxy-version", "proxy_init_image_version":"v1.3.0"}
+    {"proxyImage":{"imageName":"gcr.io/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"gcr.io/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"","requestMemory":"","limitCpu":"","limitMemory":""},"proxyUid":"2102","logLevel":{"level":"warn,linkerd=info"},"disableExternalProfiles":true,"proxyVersion":"install-proxy-version","proxy_init_image_version":"v1.3.1","debugImage":{"imageName":"gcr.io/linkerd-io/debug","pullPolicy":"IfNotPresent"},"debugImageVersion":"install-debug-version"}
   install: |
     {"cliVersion":"dev-undefined","flags":[]}`,
 			},
@@ -2326,7 +2326,12 @@ data:
 					},
 					DisableExternalProfiles: true,
 					ProxyVersion:            "install-proxy-version",
-					ProxyInitImageVersion:   "v1.3.0",
+					ProxyInitImageVersion:   "v1.3.1",
+					DebugImage: &configPb.Image{
+						ImageName:  "gcr.io/linkerd-io/debug",
+						PullPolicy: "IfNotPresent",
+					},
+					DebugImageVersion: "install-debug-version",
 				}, Install: &configPb.Install{
 					CliVersion: "dev-undefined",
 				}},
@@ -2390,7 +2395,7 @@ data:
 	}
 }
 
-func getFakeConfig(secretScheme string, schemeInConfig string, issuerCerts *issuercerts.IssuerCertData) []string {
+func getFakeConfig(secretScheme string, schemeInConfig string, issuerCerts *issuercerts.IssuerCertData, configAnchorsModifier func(string) string) []string {
 
 	var resources []string
 	base64.StdEncoding.EncodeToString([]byte(issuerCerts.IssuerCrt))
@@ -2422,8 +2427,11 @@ data:
 ---
 `, base64.StdEncoding.EncodeToString([]byte(issuerCerts.TrustAnchors)), base64.StdEncoding.EncodeToString([]byte(issuerCerts.IssuerCrt)), base64.StdEncoding.EncodeToString([]byte(issuerCerts.IssuerKey))))
 	}
-
-	anchors, _ := json.Marshal(issuerCerts.TrustAnchors)
+	anchorsToEncode := issuerCerts.TrustAnchors
+	if configAnchorsModifier != nil {
+		anchorsToEncode = configAnchorsModifier(anchorsToEncode)
+	}
+	anchors, _ := json.Marshal(anchorsToEncode)
 
 	resources = append(resources, fmt.Sprintf(`
 kind: ConfigMap
@@ -2463,13 +2471,14 @@ func TestLinkerdIdentityCheck(t *testing.T) {
 		ends   time.Time
 	}
 	var testCases = []struct {
-		checkDescription   string
-		certificateDNSName string
-		lifespan           *lifeSpan
-		tlsSecretScheme    string
-		schemeInConfig     string
-		expectedOutput     []string
-		checkerToTest      string
+		checkDescription      string
+		certificateDNSName    string
+		lifespan              *lifeSpan
+		tlsSecretScheme       string
+		schemeInConfig        string
+		expectedOutput        []string
+		checkerToTest         string
+		configAnchorsModifier func(string) string
 	}{
 		{
 			checkerToTest:    "certificate config is valid",
@@ -2478,7 +2487,6 @@ func TestLinkerdIdentityCheck(t *testing.T) {
 			schemeInConfig:   k8s.IdentityIssuerSchemeLinkerd,
 			expectedOutput:   []string{"linkerd-identity-test-cat certificate config is valid"},
 		},
-
 		{
 			checkerToTest:    "certificate config is valid",
 			checkDescription: "works with valid cert and kubernetes.io/tls secret",
@@ -2513,6 +2521,26 @@ func TestLinkerdIdentityCheck(t *testing.T) {
 			tlsSecretScheme:  k8s.IdentityIssuerSchemeLinkerd,
 			schemeInConfig:   string(corev1.SecretTypeTLS),
 			expectedOutput:   []string{"linkerd-identity-test-cat certificate config is valid: key ca.crt containing the trust anchors needs to exist in secret linkerd-identity-issuer if --identity-external-issuer=true"},
+		},
+		{
+			checkerToTest:    "certificate config is valid",
+			checkDescription: "does not get influenced by newline differences between trust anchors (missing newline)",
+			tlsSecretScheme:  string(corev1.SecretTypeTLS),
+			schemeInConfig:   string(corev1.SecretTypeTLS),
+			expectedOutput:   []string{"linkerd-identity-test-cat certificate config is valid"},
+			configAnchorsModifier: func(anchors string) string {
+				return strings.TrimSpace(anchors)
+			},
+		},
+		{
+			checkerToTest:    "certificate config is valid",
+			checkDescription: "does not get influenced by newline differences between trust anchors (extra newline)",
+			tlsSecretScheme:  string(corev1.SecretTypeTLS),
+			schemeInConfig:   string(corev1.SecretTypeTLS),
+			expectedOutput:   []string{"linkerd-identity-test-cat certificate config is valid"},
+			configAnchorsModifier: func(anchors string) string {
+				return anchors + "\n"
+			},
 		},
 		{
 			checkerToTest:      "issuer cert is issued by the trust root",
@@ -2587,7 +2615,7 @@ func TestLinkerdIdentityCheck(t *testing.T) {
 			var err error
 			hc.ControlPlaneNamespace = "linkerd"
 			issuerData := createIssuerData(testCase.certificateDNSName, testCase.lifespan.starts, testCase.lifespan.ends)
-			config := getFakeConfig(testCase.tlsSecretScheme, testCase.schemeInConfig, issuerData)
+			config := getFakeConfig(testCase.tlsSecretScheme, testCase.schemeInConfig, issuerData, testCase.configAnchorsModifier)
 			hc.kubeAPI, err = k8s.NewFakeAPI(config...)
 			_, hc.linkerdConfig, _ = hc.checkLinkerdConfigConfigMap()
 
@@ -2961,7 +2989,7 @@ func TestCniChecks(t *testing.T) {
 			k8sConfigs := getFakeCniResources(tc.testCaseOpts)
 			var err error
 			hc.kubeAPI, err = k8s.NewFakeAPI(k8sConfigs...)
-			hc.NoInitContainer = true
+			hc.CNIEnabled = true
 			if err != nil {
 				t.Fatalf("Unexpected error: %s", err)
 			}

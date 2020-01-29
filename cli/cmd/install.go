@@ -45,7 +45,7 @@ type (
 		controllerUID               int64
 		disableH2Upgrade            bool
 		disableHeartbeat            bool
-		noInitContainer             bool
+		cniEnabled                  bool
 		skipChecks                  bool
 		omitWebhookSideEffects      bool
 		restrictDashboardPrivileges bool
@@ -179,7 +179,7 @@ func newInstallOptionsWithDefaults() (*installOptions, error) {
 		controllerUID:               defaults.ControllerUID,
 		disableH2Upgrade:            !defaults.EnableH2Upgrade,
 		disableHeartbeat:            defaults.DisableHeartBeat,
-		noInitContainer:             defaults.Global.NoInitContainer,
+		cniEnabled:                  defaults.Global.CNIEnabled,
 		omitWebhookSideEffects:      defaults.OmitWebhookSideEffects,
 		restrictDashboardPrivileges: defaults.RestrictDashboardPrivileges,
 		controlPlaneTracing:         defaults.Global.ControlPlaneTracing,
@@ -189,6 +189,8 @@ func newInstallOptionsWithDefaults() (*installOptions, error) {
 			proxyImage:             defaults.Global.Proxy.Image.Name,
 			initImage:              defaults.Global.ProxyInit.Image.Name,
 			initImageVersion:       version.ProxyInitVersion,
+			debugImage:             defaults.DebugContainer.Image.Name,
+			debugImageVersion:      version.Version,
 			dockerRegistry:         defaultDockerRegistry,
 			imagePullPolicy:        defaults.Global.ImagePullPolicy,
 			ignoreInboundPorts:     nil,
@@ -496,7 +498,7 @@ func (options *installOptions) recordableFlagSet() *pflag.FlagSet {
 func (options *installOptions) allStageFlagSet() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("all-stage", pflag.ExitOnError)
 
-	flags.BoolVar(&options.noInitContainer, "linkerd-cni-enabled", options.noInitContainer,
+	flags.BoolVar(&options.cniEnabled, "linkerd-cni-enabled", options.cniEnabled,
 		"Experimental: Omit the NET_ADMIN capability in the PSP and the proxy-init container when injecting the proxy; requires the linkerd-cni plugin to already be installed",
 	)
 
@@ -661,7 +663,7 @@ func (options *installOptions) buildValuesWithoutIdentity(configs *pb.All) (*l5d
 	installValues.Global.ImagePullPolicy = options.imagePullPolicy
 	installValues.GrafanaImage = fmt.Sprintf("%s/grafana", options.dockerRegistry)
 	installValues.Global.Namespace = controlPlaneNamespace
-	installValues.Global.NoInitContainer = options.noInitContainer
+	installValues.Global.CNIEnabled = options.cniEnabled
 	installValues.OmitWebhookSideEffects = options.omitWebhookSideEffects
 	installValues.PrometheusLogLevel = toPromLogLevel(strings.ToLower(options.controllerLogLevel))
 	installValues.HeartbeatSchedule = options.heartbeatSchedule()
@@ -701,6 +703,10 @@ func (options *installOptions) buildValuesWithoutIdentity(configs *pb.All) (*l5d
 	installValues.Global.ProxyInit.Image.Version = options.initImageVersion
 	installValues.Global.ProxyInit.IgnoreInboundPorts = strings.Join(options.ignoreInboundPorts, ",")
 	installValues.Global.ProxyInit.IgnoreOutboundPorts = strings.Join(options.ignoreOutboundPorts, ",")
+
+	installValues.DebugContainer.Image.Name = registryOverride(options.debugImage, options.dockerRegistry)
+	installValues.DebugContainer.Image.PullPolicy = options.imagePullPolicy
+	installValues.DebugContainer.Image.Version = options.debugImageVersion
 
 	return installValues, nil
 }
@@ -768,7 +774,7 @@ func (options *installOptions) configs(identity *pb.IdentityContext) *pb.All {
 func (options *installOptions) globalConfig(identity *pb.IdentityContext) *pb.Global {
 	return &pb.Global{
 		LinkerdNamespace:       controlPlaneNamespace,
-		CniEnabled:             options.noInitContainer,
+		CniEnabled:             options.cniEnabled,
 		Version:                options.controlPlaneVersion,
 		IdentityContext:        identity,
 		OmitWebhookSideEffects: options.omitWebhookSideEffects,
@@ -830,6 +836,11 @@ func (options *installOptions) proxyConfig() *pb.Proxy {
 		DisableExternalProfiles: !options.enableExternalProfiles,
 		ProxyVersion:            options.proxyVersion,
 		ProxyInitImageVersion:   options.initImageVersion,
+		DebugImage: &pb.Image{
+			ImageName:  registryOverride(options.debugImage, options.dockerRegistry),
+			PullPolicy: options.imagePullPolicy,
+		},
+		DebugImageVersion: options.debugImageVersion,
 	}
 }
 
@@ -842,9 +853,10 @@ func errAfterRunningChecks(options *installOptions) error {
 		ControlPlaneNamespace: controlPlaneNamespace,
 		KubeConfig:            kubeconfigPath,
 		Impersonate:           impersonate,
+		ImpersonateGroup:      impersonateGroup,
 		KubeContext:           kubeContext,
 		APIAddr:               apiAddr,
-		NoInitContainer:       options.noInitContainer,
+		CNIEnabled:            options.cniEnabled,
 	})
 
 	var k8sAPIError error
@@ -883,7 +895,7 @@ func errAfterRunningChecks(options *installOptions) error {
 }
 
 func errIfLinkerdConfigConfigMapExists() error {
-	kubeAPI, err := k8s.NewAPI(kubeconfigPath, kubeContext, impersonate, 0)
+	kubeAPI, err := k8s.NewAPI(kubeconfigPath, kubeContext, impersonate, impersonateGroup, 0)
 	if err != nil {
 		return err
 	}
@@ -1011,7 +1023,7 @@ func (idopts *installIdentityOptions) genValues() (*identityWithAnchorsAndTrustD
 
 func (idopts *installIdentityOptions) readExternallyManaged() (*identityWithAnchorsAndTrustDomain, error) {
 
-	kubeAPI, err := k8s.NewAPI(kubeconfigPath, kubeContext, impersonate, 0)
+	kubeAPI, err := k8s.NewAPI(kubeconfigPath, kubeContext, impersonate, impersonateGroup, 0)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching external issuer config: %s", err)
 	}

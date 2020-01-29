@@ -34,6 +34,7 @@ import (
 	yamlDecoder "k8s.io/apimachinery/pkg/util/yaml"
 	k8sVersion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/kubernetes"
+	apiregistrationv1client "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/typed/apiregistration/v1"
 	"sigs.k8s.io/yaml"
 )
 
@@ -145,6 +146,11 @@ const (
 	linkerdCNIDisabledSkipReason = "skipping check because CNI is not enabled"
 	linkerdCNIResourceName       = "linkerd-cni"
 	linkerdCNIConfigMapName      = "linkerd-cni-config"
+
+	// linkerdTapAPIServiceName is the name of the tap api service
+	// This key is passed to checkApiSercice method to check whether
+	// the api service is available or not
+	linkerdTapAPIServiceName = "v1alpha1.tap.linkerd.io"
 )
 
 // HintBaseURL is the base URL on the linkerd.io website that all check hints
@@ -304,10 +310,11 @@ type Options struct {
 	KubeConfig            string
 	KubeContext           string
 	Impersonate           string
+	ImpersonateGroup      []string
 	APIAddr               string
 	VersionOverride       string
 	RetryDeadline         time.Time
-	NoInitContainer       bool
+	CNIEnabled            bool
 	InstallManifest       string
 }
 
@@ -373,7 +380,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "k8s-api",
 					fatal:       true,
 					check: func(context.Context) (err error) {
-						hc.kubeAPI, err = k8s.NewAPI(hc.KubeConfig, hc.KubeContext, hc.Impersonate, requestTimeout)
+						hc.kubeAPI, err = k8s.NewAPI(hc.KubeConfig, hc.KubeContext, hc.Impersonate, hc.ImpersonateGroup, requestTimeout)
 						return
 					},
 				},
@@ -560,7 +567,7 @@ func (hc *HealthChecker) allCategories() []category {
 					check: func(context.Context) (err error) {
 						hc.uuid, hc.linkerdConfig, err = hc.checkLinkerdConfigConfigMap()
 						if hc.linkerdConfig != nil {
-							hc.NoInitContainer = hc.linkerdConfig.Global.CniEnabled
+							hc.CNIEnabled = hc.linkerdConfig.Global.CniEnabled
 						}
 						return
 					},
@@ -722,7 +729,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "cni-plugin-cm-exists",
 					fatal:       true,
 					check: func(context.Context) error {
-						if !hc.NoInitContainer {
+						if !hc.CNIEnabled {
 							return &SkipError{Reason: linkerdCNIDisabledSkipReason}
 						}
 						_, err := hc.kubeAPI.CoreV1().ConfigMaps(hc.CNINamespace).Get(linkerdCNIConfigMapName, metav1.GetOptions{})
@@ -734,7 +741,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "cni-plugin-psp-exists",
 					fatal:       true,
 					check: func(context.Context) error {
-						if !hc.NoInitContainer {
+						if !hc.CNIEnabled {
 							return &SkipError{Reason: linkerdCNIDisabledSkipReason}
 						}
 						pspName := fmt.Sprintf("linkerd-%s-cni", hc.CNINamespace)
@@ -750,7 +757,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "cni-plugin-cr-exists",
 					fatal:       true,
 					check: func(context.Context) error {
-						if !hc.NoInitContainer {
+						if !hc.CNIEnabled {
 							return &SkipError{Reason: linkerdCNIDisabledSkipReason}
 						}
 						_, err := hc.kubeAPI.RbacV1().ClusterRoles().Get(linkerdCNIResourceName, metav1.GetOptions{})
@@ -765,7 +772,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "cni-plugin-crb-exists",
 					fatal:       true,
 					check: func(context.Context) error {
-						if !hc.NoInitContainer {
+						if !hc.CNIEnabled {
 							return &SkipError{Reason: linkerdCNIDisabledSkipReason}
 						}
 						_, err := hc.kubeAPI.RbacV1().ClusterRoleBindings().Get(linkerdCNIResourceName, metav1.GetOptions{})
@@ -780,7 +787,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "cni-plugin-r-exists",
 					fatal:       true,
 					check: func(context.Context) error {
-						if !hc.NoInitContainer {
+						if !hc.CNIEnabled {
 							return &SkipError{Reason: linkerdCNIDisabledSkipReason}
 						}
 						_, err := hc.kubeAPI.RbacV1().Roles(hc.CNINamespace).Get(linkerdCNIResourceName, metav1.GetOptions{})
@@ -795,7 +802,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "cni-plugin-rb-exists",
 					fatal:       true,
 					check: func(context.Context) error {
-						if !hc.NoInitContainer {
+						if !hc.CNIEnabled {
 							return &SkipError{Reason: linkerdCNIDisabledSkipReason}
 						}
 						_, err := hc.kubeAPI.RbacV1().RoleBindings(hc.CNINamespace).Get(linkerdCNIResourceName, metav1.GetOptions{})
@@ -810,7 +817,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "cni-plugin-sa-exists",
 					fatal:       true,
 					check: func(context.Context) error {
-						if !hc.NoInitContainer {
+						if !hc.CNIEnabled {
 							return &SkipError{Reason: linkerdCNIDisabledSkipReason}
 						}
 						_, err := hc.kubeAPI.CoreV1().ServiceAccounts(hc.CNINamespace).Get(linkerdCNIResourceName, metav1.GetOptions{})
@@ -825,7 +832,7 @@ func (hc *HealthChecker) allCategories() []category {
 					hintAnchor:  "cni-plugin-ds-exists",
 					fatal:       true,
 					check: func(context.Context) (err error) {
-						if !hc.NoInitContainer {
+						if !hc.CNIEnabled {
 							return &SkipError{Reason: linkerdCNIDisabledSkipReason}
 						}
 						hc.cniDaemonSet, err = hc.kubeAPI.Interface.AppsV1().DaemonSets(hc.CNINamespace).Get(linkerdCNIResourceName, metav1.GetOptions{})
@@ -842,7 +849,7 @@ func (hc *HealthChecker) allCategories() []category {
 					surfaceErrorOnRetry: true,
 					fatal:               true,
 					check: func(ctx context.Context) error {
-						if !hc.NoInitContainer {
+						if !hc.CNIEnabled {
 							return &SkipError{Reason: linkerdCNIDisabledSkipReason}
 						}
 						scheduled := hc.cniDaemonSet.Status.DesiredNumberScheduled
@@ -1001,6 +1008,14 @@ func (hc *HealthChecker) allCategories() []category {
 						return hc.apiClient.SelfCheck(ctx, &healthcheckPb.SelfCheckRequest{})
 					},
 				},
+				{
+					description: "tap api service is running",
+					hintAnchor:  "l5d-tap-api",
+					warning:     true,
+					check: func(ctx context.Context) error {
+						return hc.checkAPIService(linkerdTapAPIServiceName)
+					},
+				},
 			},
 		},
 		{
@@ -1009,6 +1024,7 @@ func (hc *HealthChecker) allCategories() []category {
 				{
 					description: "can determine the latest version",
 					hintAnchor:  "l5d-version-latest",
+					warning:     true,
 					check: func(ctx context.Context) (err error) {
 						if hc.VersionOverride != "" {
 							hc.latestVersions, err = version.NewChannels(hc.VersionOverride)
@@ -1191,7 +1207,6 @@ func (hc *HealthChecker) addCategory(c category) {
 // designated as warnings will not cause RunCheck to return false, however.
 func (hc *HealthChecker) RunChecks(observer CheckObserver) bool {
 	success := true
-
 	for _, c := range hc.categories {
 		if c.enabled {
 			for _, checker := range c.checkers {
@@ -1345,7 +1360,7 @@ func (hc *HealthChecker) checkCertificatesConfig() (*tls.Cred, []*x509.Certifica
 	} else {
 		data, err = issuercerts.FetchExternalIssuerData(hc.kubeAPI, hc.ControlPlaneNamespace)
 		// ensure trust trustRoots in config matches whats in the secret
-		if data != nil && idctx.TrustAnchorsPem != data.TrustAnchors {
+		if data != nil && strings.TrimSpace(idctx.TrustAnchorsPem) != strings.TrimSpace(data.TrustAnchors) {
 			errFormat := "IdentityContext.TrustAnchorsPem does not match %s in %s"
 			err = fmt.Errorf(errFormat, k8s.IdentityIssuerTrustAnchorsNameExternal, k8s.IdentityIssuerSecretName)
 		}
@@ -1785,6 +1800,29 @@ func (hc *HealthChecker) checkCanCreateNonNamespacedResources() error {
 
 func (hc *HealthChecker) checkCanGet(namespace, group, version, resource string) error {
 	return hc.checkCanPerformAction("get", namespace, group, version, resource)
+}
+
+func (hc *HealthChecker) checkAPIService(serviceName string) error {
+	apiServiceClient, err := apiregistrationv1client.NewForConfig(hc.kubeAPI.Config)
+	if err != nil {
+		return err
+	}
+
+	apiStatus, err := apiServiceClient.APIServices().Get(serviceName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, condition := range apiStatus.Status.Conditions {
+		if condition.Type == "Available" {
+			if condition.Status == "True" {
+				return nil
+			}
+			return fmt.Errorf("%s: %s", condition.Reason, condition.Message)
+		}
+	}
+
+	return fmt.Errorf("%s service not available", linkerdTapAPIServiceName)
 }
 
 func (hc *HealthChecker) checkCapability(cap string) error {

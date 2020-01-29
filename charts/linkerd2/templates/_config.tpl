@@ -1,7 +1,7 @@
 {{- define "linkerd.configs.global" -}}
 {
   "linkerdNamespace": "{{.Values.global.namespace}}",
-  "cniEnabled": {{ default false .Values.noInitContainer }},
+  "cniEnabled": {{ default false .Values.global.cniEnabled }},
   "version": "{{.Values.global.linkerdVersion}}",
   "identityContext":{
     "trustDomain": "{{.Values.global.identityTrustDomain}}",
@@ -30,22 +30,10 @@
     "port": {{.Values.global.proxy.ports.control}}
   },
   "ignoreInboundPorts":[
-    {{- $ports := splitList "," .Values.global.proxyInit.ignoreInboundPorts -}}
-    {{- if gt (len $ports) 1}}
-    {{- $last := sub (len $ports) 1 -}}
-    {{- range $i,$port := $ports -}}
-    {"port":{{$port}}}{{ternary "," "" (ne $i $last)}}
-    {{- end -}}
-    {{- end -}}
+    {{- include "partials.splitStringListToPorts" .Values.global.proxyInit.ignoreInboundPorts -}}
   ],
   "ignoreOutboundPorts":[
-    {{- $ports := splitList "," .Values.global.proxyInit.ignoreOutboundPorts -}}
-    {{- if gt (len $ports) 1}}
-    {{- $last := sub (len $ports) 1 -}}
-    {{- range $i,$port := $ports -}}
-    {"port":{{$port}}}{{ternary "," "" (ne $i $last)}}
-    {{- end -}}
-    {{- end -}}
+    {{- include "partials.splitStringListToPorts" .Values.global.proxyInit.ignoreOutboundPorts -}}
   ],
   "inboundPort":{
     "port": {{.Values.global.proxy.ports.inbound}}
@@ -68,7 +56,12 @@
   },
   "disableExternalProfiles": {{not .Values.global.proxy.enableExternalProfiles}},
   "proxyVersion": "{{.Values.global.proxy.image.version}}",
-  "proxyInitImageVersion": "{{.Values.global.proxyInit.image.version}}"
+  "proxyInitImageVersion": "{{.Values.global.proxyInit.image.version}}",
+  "debugImage":{
+    "imageName":"{{.Values.debugContainer.image.name}}",
+    "pullPolicy":"{{.Values.debugContainer.image.pullPolicy}}"
+  },
+  "debugImageVersion": "{{.Values.debugContainer.image.version}}"
 }
 {{- end -}}
 

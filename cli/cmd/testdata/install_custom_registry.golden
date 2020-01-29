@@ -225,6 +225,15 @@ rules:
   resources: ["configmaps"]
   verbs: ["get"]
   resourceNames: ["linkerd-config"]
+- apiGroups: [""]
+  resources: ["namespaces", "configmaps"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["serviceaccounts", "pods"]
+  verbs: ["list"]
+- apiGroups: ["apps"]
+  resources: ["replicasets"]
+  verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -238,6 +247,62 @@ roleRef:
   kind: Role
   name: linkerd-web
   apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: linkerd-web
+  namespace: linkerd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: linkerd-linkerd-web-check
+  labels:
+    linkerd.io/control-plane-component: web
+    linkerd.io/control-plane-ns: linkerd
+rules:
+- apiGroups: ["rbac.authorization.k8s.io"]
+  resources: ["clusterroles", "clusterrolebindings"]
+  verbs: ["list"]
+- apiGroups: ["apiextensions.k8s.io"]
+  resources: ["customresourcedefinitions"]
+  verbs: ["list"]
+- apiGroups: ["admissionregistration.k8s.io"]
+  resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
+  verbs: ["list"]
+- apiGroups: ["policy"]
+  resources: ["podsecuritypolicies"]
+  verbs: ["list"]
+- apiGroups: ["linkerd.io"]
+  resources: ["serviceprofiles"]
+  verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: linkerd-linkerd-web-check
+  labels:
+    linkerd.io/control-plane-component: web
+    linkerd.io/control-plane-ns: linkerd
+roleRef:
+  kind: ClusterRole
+  name: linkerd-linkerd-web-check
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: linkerd-web
+  namespace: linkerd
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: linkerd-linkerd-web-admin
+  labels:
+    linkerd.io/control-plane-component: web
+    linkerd.io/control-plane-ns: linkerd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: linkerd-linkerd-tap-admin
 subjects:
 - kind: ServiceAccount
   name: linkerd-web
@@ -786,9 +851,9 @@ data:
   global: |
     {"linkerdNamespace":"linkerd","cniEnabled":false,"version":"install-control-plane-version","identityContext":{"trustDomain":"cluster.local","trustAnchorsPem":"-----BEGIN CERTIFICATE-----\nMIIBYDCCAQegAwIBAgIBATAKBggqhkjOPQQDAjAYMRYwFAYDVQQDEw1jbHVzdGVy\nLmxvY2FsMB4XDTE5MDMwMzAxNTk1MloXDTI5MDIyODAyMDM1MlowGDEWMBQGA1UE\nAxMNY2x1c3Rlci5sb2NhbDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABAChpAt0\nxtgO9qbVtEtDK80N6iCL2Htyf2kIv2m5QkJ1y0TFQi5hTVe3wtspJ8YpZF0pl364\n6TiYeXB8tOOhIACjQjBAMA4GA1UdDwEB/wQEAwIBBjAdBgNVHSUEFjAUBggrBgEF\nBQcDAQYIKwYBBQUHAwIwDwYDVR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAgNHADBE\nAiBQ/AAwF8kG8VOmRSUTPakSSa/N4mqK2HsZuhQXCmiZHwIgZEzI5DCkpU7w3SIv\nOLO4Zsk1XrGZHGsmyiEyvYF9lpY=\n-----END CERTIFICATE-----\n","issuanceLifetime":"86400s","clockSkewAllowance":"20s","scheme":"linkerd.io/tls"},"autoInjectContext":null,"omitWebhookSideEffects":false,"clusterDomain":"cluster.local"}
   proxy: |
-    {"proxyImage":{"imageName":"gcr.io/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"gcr.io/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"","requestMemory":"","limitCpu":"","limitMemory":""},"proxyUid":"2102","logLevel":{"level":"warn,linkerd=info"},"disableExternalProfiles":true,"proxyVersion":"install-proxy-version","proxyInitImageVersion":"v1.3.1","debugImage":{"imageName":"gcr.io/linkerd-io/debug","pullPolicy":"IfNotPresent"},"debugImageVersion":"install-debug-version"}
+    {"proxyImage":{"imageName":"my.custom.registry/linkerd-io/proxy","pullPolicy":"IfNotPresent"},"proxyInitImage":{"imageName":"my.custom.registry/linkerd-io/proxy-init","pullPolicy":"IfNotPresent"},"controlPort":{"port":4190},"ignoreInboundPorts":[],"ignoreOutboundPorts":[],"inboundPort":{"port":4143},"adminPort":{"port":4191},"outboundPort":{"port":4140},"resource":{"requestCpu":"","requestMemory":"","limitCpu":"","limitMemory":""},"proxyUid":"2102","logLevel":{"level":"warn,linkerd=info"},"disableExternalProfiles":true,"proxyVersion":"install-proxy-version","proxyInitImageVersion":"v1.3.1","debugImage":{"imageName":"my.custom.registry/linkerd-io/debug","pullPolicy":"IfNotPresent"},"debugImageVersion":"install-debug-version"}
   install: |
-    {"cliVersion":"dev-undefined","flags":[]}
+    {"cliVersion":"dev-undefined","flags":[{"name":"registry","value":"my.custom.registry/linkerd-io"}]}
 ---
 ###
 ### Identity Controller Service
@@ -865,7 +930,7 @@ spec:
       - args:
         - identity
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:install-control-plane-version
+        image: my.custom.registry/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -951,7 +1016,7 @@ spec:
           value: linkerd-destination.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_TAP_SVC_NAME
           value: linkerd-tap.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:install-proxy-version
+        image: my.custom.registry/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -990,7 +1055,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.3.1
+        image: my.custom.registry/linkerd-io/proxy-init:v1.3.1
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -1086,7 +1151,7 @@ spec:
         - -destination-addr=linkerd-dst.linkerd.svc.cluster.local:8086
         - -controller-namespace=linkerd
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:install-control-plane-version
+        image: my.custom.registry/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1170,7 +1235,7 @@ spec:
           value: linkerd-destination.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_TAP_SVC_NAME
           value: linkerd-tap.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:install-proxy-version
+        image: my.custom.registry/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1209,7 +1274,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.3.1
+        image: my.custom.registry/linkerd-io/proxy-init:v1.3.1
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -1302,7 +1367,7 @@ spec:
         - -controller-namespace=linkerd
         - -enable-h2-upgrade=true
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:install-control-plane-version
+        image: my.custom.registry/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1386,7 +1451,7 @@ spec:
           value: linkerd-destination.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_TAP_SVC_NAME
           value: linkerd-tap.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:install-proxy-version
+        image: my.custom.registry/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1425,7 +1490,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.3.1
+        image: my.custom.registry/linkerd-io/proxy-init:v1.3.1
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -1490,7 +1555,7 @@ spec:
           restartPolicy: Never
           containers:
           - name: heartbeat
-            image: gcr.io/linkerd-io/controller:install-control-plane-version
+            image: my.custom.registry/linkerd-io/controller:install-control-plane-version
             imagePullPolicy: IfNotPresent
             args:
             - "heartbeat"
@@ -1566,7 +1631,7 @@ spec:
         - -controller-namespace=linkerd
         - -log-level=info
         - -enforced-host=^(localhost|127\.0\.0\.1|linkerd-web\.linkerd\.svc\.cluster\.local|linkerd-web\.linkerd\.svc|\[::1\])(:\d+)?$
-        image: gcr.io/linkerd-io/web:install-control-plane-version
+        image: my.custom.registry/linkerd-io/web:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1650,7 +1715,7 @@ spec:
           value: linkerd-destination.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_TAP_SVC_NAME
           value: linkerd-tap.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:install-proxy-version
+        image: my.custom.registry/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -1689,7 +1754,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.3.1
+        image: my.custom.registry/linkerd-io/proxy-init:v1.3.1
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -2000,7 +2065,7 @@ spec:
           value: linkerd-destination.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_TAP_SVC_NAME
           value: linkerd-tap.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:install-proxy-version
+        image: my.custom.registry/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2039,7 +2104,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.3.1
+        image: my.custom.registry/linkerd-io/proxy-init:v1.3.1
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -2191,7 +2256,7 @@ spec:
       - env:
         - name: GF_PATHS_DATA
           value: /data
-        image: gcr.io/linkerd-io/grafana:install-control-plane-version
+        image: my.custom.registry/linkerd-io/grafana:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2275,7 +2340,7 @@ spec:
           value: linkerd-destination.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_TAP_SVC_NAME
           value: linkerd-tap.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:install-proxy-version
+        image: my.custom.registry/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2314,7 +2379,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.3.1
+        image: my.custom.registry/linkerd-io/proxy-init:v1.3.1
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -2392,7 +2457,7 @@ spec:
       - args:
         - proxy-injector
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:install-control-plane-version
+        image: my.custom.registry/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2479,7 +2544,7 @@ spec:
           value: linkerd-destination.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_TAP_SVC_NAME
           value: linkerd-tap.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:install-proxy-version
+        image: my.custom.registry/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2518,7 +2583,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.3.1
+        image: my.custom.registry/linkerd-io/proxy-init:v1.3.1
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -2628,7 +2693,7 @@ spec:
       - args:
         - sp-validator
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:install-control-plane-version
+        image: my.custom.registry/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2713,7 +2778,7 @@ spec:
           value: linkerd-destination.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_TAP_SVC_NAME
           value: linkerd-tap.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:install-proxy-version
+        image: my.custom.registry/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2752,7 +2817,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.3.1
+        image: my.custom.registry/linkerd-io/proxy-init:v1.3.1
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:
@@ -2846,7 +2911,7 @@ spec:
         - tap
         - -controller-namespace=linkerd
         - -log-level=info
-        image: gcr.io/linkerd-io/controller:install-control-plane-version
+        image: my.custom.registry/linkerd-io/controller:install-control-plane-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2935,7 +3000,7 @@ spec:
           value: linkerd-destination.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
         - name: LINKERD2_PROXY_TAP_SVC_NAME
           value: linkerd-tap.$(_l5d_ns).serviceaccount.identity.$(_l5d_ns).$(_l5d_trustdomain)
-        image: gcr.io/linkerd-io/proxy:install-proxy-version
+        image: my.custom.registry/linkerd-io/proxy:install-proxy-version
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -2974,7 +3039,7 @@ spec:
         - 4190,4191
         - --outbound-ports-to-ignore
         - "443"
-        image: gcr.io/linkerd-io/proxy-init:v1.3.1
+        image: my.custom.registry/linkerd-io/proxy-init:v1.3.1
         imagePullPolicy: IfNotPresent
         name: linkerd-init
         resources:

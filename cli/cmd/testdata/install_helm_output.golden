@@ -907,8 +907,8 @@ data:
       "controlPort":{
         "port": 4190
       },
-      "ignoreInboundPorts":[],
-      "ignoreOutboundPorts":[],
+      "ignoreInboundPorts":[{"port":222}],
+      "ignoreOutboundPorts":[{"port":111}],
       "inboundPort":{
         "port": 4143
       },
@@ -930,7 +930,12 @@ data:
       },
       "disableExternalProfiles": true,
       "proxyVersion": "test-proxy-version",
-      "proxyInitImageVersion": "test-proxy-init-version"
+      "proxyInitImageVersion": "test-proxy-init-version",
+      "debugImage":{
+        "imageName":"gcr.io/linkerd-io/debug",
+        "pullPolicy":"IfNotPresent"
+      },
+      "debugImageVersion": "test-debug-version"
     }
   install: |
     {
@@ -1128,9 +1133,9 @@ spec:
         - --proxy-uid
         - "2102"
         - --inbound-ports-to-ignore
-        - 4190,4191
+        - 4190,4191,222
         - --outbound-ports-to-ignore
-        - "443"
+        - 443,111
         image: gcr.io/linkerd-io/proxy-init:test-proxy-init-version
         imagePullPolicy: IfNotPresent
         name: linkerd-init
@@ -1340,9 +1345,9 @@ spec:
         - --proxy-uid
         - "2102"
         - --inbound-ports-to-ignore
-        - 4190,4191
+        - 4190,4191,222
         - --outbound-ports-to-ignore
-        - "443"
+        - 443,111
         image: gcr.io/linkerd-io/proxy-init:test-proxy-init-version
         imagePullPolicy: IfNotPresent
         name: linkerd-init
@@ -1549,9 +1554,9 @@ spec:
         - --proxy-uid
         - "2102"
         - --inbound-ports-to-ignore
-        - 4190,4191
+        - 4190,4191,222
         - --outbound-ports-to-ignore
-        - "443"
+        - 443,111
         image: gcr.io/linkerd-io/proxy-init:test-proxy-init-version
         imagePullPolicy: IfNotPresent
         name: linkerd-init
@@ -1808,9 +1813,9 @@ spec:
         - --proxy-uid
         - "2102"
         - --inbound-ports-to-ignore
-        - 4190,4191
+        - 4190,4191,222
         - --outbound-ports-to-ignore
-        - "443"
+        - 443,111
         image: gcr.io/linkerd-io/proxy-init:test-proxy-init-version
         imagePullPolicy: IfNotPresent
         name: linkerd-init
@@ -1962,6 +1967,20 @@ data:
       # foo=bar
       - action: labelmap
         regex: __meta_kubernetes_pod_label_linkerd_io_(.+)
+      # Copy all pod labels to tmp labels
+      - action: labelmap
+        regex: __meta_kubernetes_pod_label_(.+)
+        replacement: __tmp_pod_label_$1
+      # Take `linkerd_io_` prefixed labels and copy them without the prefix
+      - action: labelmap
+        regex: __tmp_pod_label_linkerd_io_(.+)
+        replacement:  __tmp_pod_label_$1
+      # Drop the `linkerd_io_` originals
+      - action: labeldrop
+        regex: __tmp_pod_label_linkerd_io_(.+)
+      # Copy tmp labels into real labels
+      - action: labelmap
+        regex: __tmp_pod_label_(.+)
 ---
 kind: Service
 apiVersion: v1
@@ -2137,9 +2156,9 @@ spec:
         - --proxy-uid
         - "2102"
         - --inbound-ports-to-ignore
-        - 4190,4191
+        - 4190,4191,222
         - --outbound-ports-to-ignore
-        - "443"
+        - 443,111
         image: gcr.io/linkerd-io/proxy-init:test-proxy-init-version
         imagePullPolicy: IfNotPresent
         name: linkerd-init
@@ -2405,9 +2424,9 @@ spec:
         - --proxy-uid
         - "2102"
         - --inbound-ports-to-ignore
-        - 4190,4191
+        - 4190,4191,222
         - --outbound-ports-to-ignore
-        - "443"
+        - 443,111
         image: gcr.io/linkerd-io/proxy-init:test-proxy-init-version
         imagePullPolicy: IfNotPresent
         name: linkerd-init
@@ -2603,9 +2622,9 @@ spec:
         - --proxy-uid
         - "2102"
         - --inbound-ports-to-ignore
-        - 4190,4191
+        - 4190,4191,222
         - --outbound-ports-to-ignore
-        - "443"
+        - 443,111
         image: gcr.io/linkerd-io/proxy-init:test-proxy-init-version
         imagePullPolicy: IfNotPresent
         name: linkerd-init
@@ -2831,9 +2850,9 @@ spec:
         - --proxy-uid
         - "2102"
         - --inbound-ports-to-ignore
-        - 4190,4191
+        - 4190,4191,222
         - --outbound-ports-to-ignore
-        - "443"
+        - 443,111
         image: gcr.io/linkerd-io/proxy-init:test-proxy-init-version
         imagePullPolicy: IfNotPresent
         name: linkerd-init
@@ -3047,9 +3066,9 @@ spec:
         - --proxy-uid
         - "2102"
         - --inbound-ports-to-ignore
-        - 4190,4191
+        - 4190,4191,222
         - --outbound-ports-to-ignore
-        - "443"
+        - 443,111
         image: gcr.io/linkerd-io/proxy-init:test-proxy-init-version
         imagePullPolicy: IfNotPresent
         name: linkerd-init

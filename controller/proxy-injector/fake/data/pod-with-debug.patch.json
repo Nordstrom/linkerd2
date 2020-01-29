@@ -71,6 +71,16 @@
     "op": "add",
     "path": "/spec/containers/-",
     "value": {
+      "image": "gcr.io/linkerd-io/debug:debug-image-version",
+      "imagePullPolicy": "IfNotPresent",
+      "name": "linkerd-debug",
+      "terminationMessagePolicy": "FallbackToLogsOnError"
+    }
+  },
+  {
+    "op": "add",
+    "path": "/spec/containers/-",
+    "value": {
       "env": [
         {
           "name": "LINKERD2_PROXY_LOG",
