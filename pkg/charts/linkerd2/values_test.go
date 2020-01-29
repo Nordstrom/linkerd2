@@ -99,11 +99,8 @@ func TestNewValues(t *testing.T) {
 		},
 		Identity: &Identity{
 			Issuer: &Issuer{
-				ClockSkewAllowance:  "20s",
-				IssuanceLifetime:    "86400s",
-				CrtExpiryAnnotation: "linkerd.io/identity-issuer-expiry",
-				TLS:                 &TLS{},
-				Scheme:              "linkerd.io/tls",
+				IssuanceLifetime: "86400s",
+				IssuerType:       "linkerd",
 			},
 		},
 		NodeSelector: map[string]string{
@@ -124,6 +121,15 @@ func TestNewValues(t *testing.T) {
 		ProxyInjector:    &ProxyInjector{TLS: &TLS{}},
 		ProfileValidator: &ProfileValidator{TLS: &TLS{}},
 		Tap:              &Tap{TLS: &TLS{}},
+
+		LinkerdIdentityIssuer: &LinkerdIdentityIssuer{
+			ClockSkewAllowance:  "20s",
+			CrtExpiryAnnotation: "linkerd.io/identity-issuer-expiry",
+			TLS:                 &TLS{},
+			Scheme:              "linkerd.io/tls",
+		},
+
+		AwsAcmPcaIdentityIssuer: &AwsAcmPcaIdentityIssuer{},
 	}
 
 	// pin the versions to ensure consistent test result.

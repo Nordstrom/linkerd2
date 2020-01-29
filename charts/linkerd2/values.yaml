@@ -98,24 +98,32 @@ debugContainer:
 # identity configuration
 identity:
   issuer:
-    scheme: linkerd.io/tls
+    issuerType: linkerd
 
-    clockSkewAllowance: 20s
+    issuanceLifeTime: 86400s
 
-    # must match the expiry date in crtPEM
-    crtExpiry:
+linkerdIdentityIssuer:
+  scheme: linkerd.io/tls
 
-    # control plane annotation - do not edit
-    crtExpiryAnnotation: linkerd.io/identity-issuer-expiry
+  clockSkewAllowance: 20s
 
-    issuanceLifetime: 86400s
+  # must match the expiry date in CrtPEM
+  crtExpiry:
 
-    tls:
-      # PEM-encoded certificate
-      crtPEM: |
+  # control plane annotation - do not edit
+  crtExpiryAnnotation: linkerd.io/identity-issuer-expiry
 
-      # PEM-encoded ECDSA private key
-      keyPEM: |
+  tls:
+    # PEM-encoded certificate
+    crtPEM: |
+
+    # PEM-encoded ECDSA private key
+    keyPEM: |
+
+awsAcmPcaIdentityIssuer:
+  caArn: 
+
+  caRegion: 
 
 # grafana configuration
 grafanaImage: gcr.io/linkerd-io/grafana
