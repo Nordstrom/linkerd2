@@ -46,9 +46,9 @@ In this example we set the expiration date to one year ahead:
 ```bash
 helm install \
   --set-file Identity.TrustAnchorsPEM=ca.crt \
-  --set-file Identity.Issuer.TLS.CrtPEM=issuer.crt \
-  --set-file Identity.Issuer.TLS.KeyPEM=issuer.key \
-  --set Identity.Issuer.CrtExpiry=$(date -d '+8760 hour' +"%Y-%m-%dT%H:%M:%SZ") \
+  --set-file LinkerdIdentityIssuer.TLS.CrtPEM=issuer.crt \
+  --set-file LinkerdIdentityIssuer.TLS.KeyPEM=issuer.key \
+  --set LinkerdIdentityIssuer.CrtExpiry=$(date -d '+8760 hour' +"%Y-%m-%dT%H:%M:%SZ") \
   linkerd/linkerd2
 ```
 
@@ -71,9 +71,9 @@ Then use the `-f` flag to provide the override file, for example:
 ```bash
 helm install \
   --set-file Identity.TrustAnchorsPEM=ca.crt \
-  --set-file Identity.Issuer.TLS.CrtPEM=issuer.crt \
-  --set-file Identity.Issuer.TLS.KeyPEM=issuer.key \
-  --set Identity.Issuer.CrtExpiry=$(date -d '+8760 hour' +"%Y-%m-%dT%H:%M:%SZ") \
+  --set-file LinkerdIdentityIssuer.TLS.CrtPEM=issuer.crt \
+  --set-file LinkerdIdentityIssuer.TLS.KeyPEM=issuer.key \
+  --set LinkerdIdentityIssuer.CrtExpiry=$(date -d '+8760 hour' +"%Y-%m-%dT%H:%M:%SZ") \
   -f linkerd2/values-ha.yaml
   linkerd/linkerd2
 ```
@@ -95,12 +95,12 @@ The following table lists the configurable parameters of the Linkerd2 chart and 
 |`ControllerLogLevel`                  | Log level for the control plane components                                                      |`info`|
 |`ControllerReplicas`                  | Number of replicas for each control plane pod                                                   |`1`|
 |`ControllerUID`                       | User ID for the control plane components                                                        |`2103`|
-|`Identity.Issuer.ClockSkewAllowance`  | Amount of time to allow for clock skew within a Linkerd cluster                                 |`20s`|
-|`Identity.Issuer.CrtExpiry`           | Expiration timestamp for the issuer certificate. It must be provided during install             ||
-|`Identity.Issuer.CrtExpiryAnnotation` | Annotation used to identity the issuer certificate expiration timestamp. Do not edit.           |`linkerd.io/identity-issuer-expiry`|
+|`LinkerdIdentityIssuer.ClockSkewAllowance`  | Amount of time to allow for clock skew within a Linkerd cluster                                 |`20s`|
+|`LinkerdIdentityIssuer.CrtExpiry`           | Expiration timestamp for the issuer certificate. It must be provided during install             ||
+|`LinkerdIdentityIssuer.CrtExpiryAnnotation` | Annotation used to identity the issuer certificate expiration timestamp. Do not edit.           |`linkerd.io/identity-issuer-expiry`|
 |`Identity.Issuer.IssuanceLifeTime`    | Amount of time for which the Identity issuer should certify identity                            |`86400s`|
-|`Identity.Issuer.TLS.CrtPEM`          | Issuer certificate (ECDSA). It must be provided during install.                                 ||
-|`Identity.Issuer.TLS.KeyPEM`          | Key for the issuer certificate (ECDSA). It must be provided during install.                     ||
+|`LinkerdIdentityIssuer.TLS.CrtPEM`          | Issuer certificate (ECDSA). It must be provided during install.                                 ||
+|`LinkerdIdentityIssuer.TLS.KeyPEM`          | Key for the issuer certificate (ECDSA). It must be provided during install.                     ||
 |`Identity.TrustAnchorsPEM`            | Trust root certificate (ECDSA). It must be provided during install.                             ||
 |`Identity.TrustDomain`                | Trust domain used for identity                                                                  |`cluster.local`|
 |`GrafanaImage`                        | Docker image for the Grafana container                                                          |`gcr.io/linkerd-io/grafana`|
