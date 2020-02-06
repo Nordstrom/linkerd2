@@ -253,7 +253,7 @@ func (options *upgradeOptions) validateAndBuild(stage string, k kubernetes.Inter
 
 	if options.identityOptions.crtPEMFile != "" || options.identityOptions.keyPEMFile != "" {
 
-		if configs.Global.IdentityContext.Scheme == string(corev1.SecretTypeTLS) {
+		if configs.Global.IdentityContext.LinkerdIdentityIssuer.Scheme == string(corev1.SecretTypeTLS) {
 			return nil, nil, errors.New("cannot update issuer certificates if you are using external cert management solution")
 		}
 
@@ -275,17 +275,19 @@ func (options *upgradeOptions) validateAndBuild(stage string, k kubernetes.Inter
 	}
 
 	var identity *identityWithAnchorsAndTrustDomain
+	var linkerdIdentityIssuer *charts.LinkerdIdentityIssuer
+	var awsAcmPcaIdentityIssuer *charts.AwsAcmPcaIdentityIssuer
 	idctx := configs.GetGlobal().GetIdentityContext()
 	if idctx.GetTrustDomain() == "" || idctx.GetTrustAnchorsPem() == "" {
 		// If there wasn't an idctx, or if it doesn't specify the required fields, we
 		// must be upgrading from a version that didn't support identity, so generate it anew...
-		identity, err = options.identityOptions.genValues()
+		identity, linkerdIdentityIssuer, err = options.identityOptions.genValues()
 		if err != nil {
 			return nil, nil, err
 		}
-		configs.GetGlobal().IdentityContext = toIdentityContext(identity)
+		configs.GetGlobal().IdentityContext = identityContextFrom(identity, linkerdIdentityIssuer, awsAcmPcaIdentityIssuer)
 	} else {
-		identity, err = options.fetchIdentityValues(k, idctx)
+		identity, linkerdIdentityIssuer, awsAcmPcaIdentityIssuer, err = options.fetchIdentityValues(k, idctx)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -300,6 +302,8 @@ func (options *upgradeOptions) validateAndBuild(stage string, k kubernetes.Inter
 	values.Identity = identity.Identity
 	values.Global.IdentityTrustAnchorsPEM = identity.TrustAnchorsPEM
 	values.Global.IdentityTrustDomain = identity.TrustDomain
+	values.LinkerdIdentityIssuer = linkerdIdentityIssuer
+	values.AwsAcmPcaIdentityIssuer = awsAcmPcaIdentityIssuer
 	// we need to do that if we have updated the anchors as the config map json has already been generated
 	if values.Global.IdentityTrustAnchorsPEM != configs.Global.IdentityContext.TrustAnchorsPem {
 		// override the anchors in config
@@ -420,16 +424,9 @@ func ensureIssuerCertWorksWithAllProxies(k kubernetes.Interface, cred *tls.Cred)
 //
 // This bypasses the public API so that we can access secrets and validate
 // permissions.
-func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx *pb.IdentityContext) (*identityWithAnchorsAndTrustDomain, error) {
+func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx *pb.IdentityContext) (*identityWithAnchorsAndTrustDomain, *charts.LinkerdIdentityIssuer, *charts.AwsAcmPcaIdentityIssuer, error) {
 	if idctx == nil {
-		return nil, nil
-	}
-
-	if idctx.Scheme == "" {
-		// if this is empty, then we are upgrading from a version
-		// that did not support issuer schemes. Just default to the
-		// linkerd one.
-		idctx.Scheme = k8s.IdentityIssuerSchemeLinkerd
+		return nil, nil, nil, nil
 	}
 
 	var trustAnchorsPEM string
@@ -439,7 +436,7 @@ func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx
 	if options.identityOptions.trustPEMFile != "" {
 		trustb, err := ioutil.ReadFile(options.identityOptions.trustPEMFile)
 		if err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 		trustAnchorsPEM = string(trustb)
 	} else {
@@ -451,43 +448,80 @@ func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx
 	if updatingIssuerCert {
 		issuerData, err = readIssuer(trustAnchorsPEM, options.identityOptions.crtPEMFile, options.identityOptions.keyPEMFile)
 	} else {
-		issuerData, err = fetchIssuer(k, trustAnchorsPEM, idctx.Scheme)
+		issuerData, err = fetchIssuer(k, trustAnchorsPEM, idctx.GetLinkerdIdentityIssuer().GetScheme())
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, nil, err
 	}
 
 	cred, err := issuerData.VerifyAndBuildCreds("")
 	if err != nil {
-		return nil, fmt.Errorf("issuer certificate does not work with the provided roots: %s\nFor more information: https://linkerd.io/2/tasks/rotating_identity_certificates/", err)
+		return nil, nil, nil, fmt.Errorf("issuer certificate does not work with the provided roots: %s\nFor more information: https://linkerd.io/2/tasks/rotating_identity_certificates/", err)
 	}
 	issuerData.Expiry = &cred.Crt.Certificate.NotAfter
 
 	if updatingIssuerCert && !options.force {
 		if err := ensureIssuerCertWorksWithAllProxies(k, cred); err != nil {
-			return nil, err
+			return nil, nil, nil, err
 		}
 	}
 
-	return &identityWithAnchorsAndTrustDomain{
+	identity := &identityWithAnchorsAndTrustDomain{
 		TrustDomain:     idctx.GetTrustDomain(),
 		TrustAnchorsPEM: trustAnchorsPEM,
 		Identity: &charts.Identity{
-
 			Issuer: &charts.Issuer{
-				Scheme:              idctx.Scheme,
-				ClockSkewAllowance:  idctx.GetClockSkewAllowance().String(),
-				IssuanceLifetime:    idctx.GetIssuanceLifetime().String(),
-				CrtExpiry:           *issuerData.Expiry,
-				CrtExpiryAnnotation: k8s.IdentityIssuerExpiryAnnotation,
-				TLS: &charts.TLS{
-					KeyPEM: issuerData.IssuerKey,
-					CrtPEM: issuerData.IssuerCrt,
-				},
+				IssuanceLifetime: idctx.GetIssuer().GetIssuanceLifetime().String(),
+				IssuerType:       idctx.GetIssuer().GetIssuerType(),
 			},
 		},
-	}, nil
+	}
 
+	var scheme = ""
+	var csa = "20s"
+	if idctx.GetLinkerdIdentityIssuer() != nil {
+		if idctx.GetLinkerdIdentityIssuer().GetScheme() == "" {
+			// if this is empty, then we are upgrading from a version
+			// that did not support issuer schemes. Just default to the
+			// linkerd one.
+			scheme = k8s.IdentityIssuerSchemeLinkerd
+		} else {
+			scheme = idctx.GetLinkerdIdentityIssuer().GetScheme()
+		}
+
+		csa = idctx.GetLinkerdIdentityIssuer().GetClockSkewAllowance().String()
+	}
+
+	var linkerdIdentityIssuer *charts.LinkerdIdentityIssuer
+	if identity.Identity.Issuer.IssuerType == charts.LinkerdIdentityIssuerType {
+		linkerdIdentityIssuer = &charts.LinkerdIdentityIssuer{
+			ClockSkewAllowance:  csa,
+			CrtExpiry:           *issuerData.Expiry,
+			CrtExpiryAnnotation: k8s.IdentityIssuerExpiryAnnotation,
+			Scheme:              scheme,
+			TLS: &charts.TLS{
+				KeyPEM: issuerData.IssuerKey,
+				CrtPEM: issuerData.IssuerCrt,
+			},
+		}
+	}
+
+	var caArn = ""
+	var caRegion = ""
+	if idctx.GetAwsacmpcaIdentityIssuer() != nil {
+		caArn = idctx.GetAwsacmpcaIdentityIssuer().GetCaArn()
+		caRegion = idctx.GetAwsacmpcaIdentityIssuer().GetCaRegion()
+	}
+
+	var awsAcmPcaIdentityIssuer *charts.AwsAcmPcaIdentityIssuer
+	if identity.Identity.Issuer.IssuerType == charts.AwsAcmPcaIdentityIssuerType {
+		awsAcmPcaIdentityIssuer = &charts.AwsAcmPcaIdentityIssuer{
+			CaArn:    caArn,
+			CaRegion: caRegion,
+		}
+	}
+
+	return identity, linkerdIdentityIssuer, awsAcmPcaIdentityIssuer, nil
 }
 
 func readIssuer(trustPEM, issuerCrtPath, issuerKeyPath string) (*issuercerts.IssuerCertData, error) {

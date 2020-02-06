@@ -1355,7 +1355,7 @@ func (hc *HealthChecker) checkCertificatesConfig() (*tls.Cred, []*x509.Certifica
 	idctx := configPB.Global.IdentityContext
 	var data *issuercerts.IssuerCertData
 
-	if idctx.Scheme == "" || idctx.Scheme == k8s.IdentityIssuerSchemeLinkerd {
+	if idctx.LinkerdIdentityIssuer != nil && (idctx.LinkerdIdentityIssuer.Scheme == "" || idctx.LinkerdIdentityIssuer.Scheme == k8s.IdentityIssuerSchemeLinkerd) {
 		data, err = issuercerts.FetchIssuerData(hc.kubeAPI, idctx.TrustAnchorsPem, hc.ControlPlaneNamespace)
 	} else {
 		data, err = issuercerts.FetchExternalIssuerData(hc.kubeAPI, hc.ControlPlaneNamespace)
