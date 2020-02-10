@@ -886,9 +886,14 @@ data:
       "identityContext":{
         "trustDomain": "test.trust.domain",
         "trustAnchorsPem": "test-trust-anchor",
-        "issuanceLifetime": "86400s",
-        "clockSkewAllowance": "20s",
-        "scheme": "linkerd.io/tls"
+        "issuer":{
+          "issuerType":"linkerd"
+          "issuanceLifetime": "86400s",
+        },
+        "linkerdIdentityIssuer":{
+          "clockSkewAllowance": "20s",
+          "scheme": "linkerd.io/tls"
+        }
       },
       "autoInjectContext": null,
       "omitWebhookSideEffects": false,
